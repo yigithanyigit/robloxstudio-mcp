@@ -26,7 +26,7 @@ local screenGui = plugin:CreateDockWidgetPluginGui(
 	"MCPServerInterface",
 	DockWidgetPluginGuiInfo.new(Enum.InitialDockState.Float, false, false, 400, 500, 350, 450)
 )
-screenGui.Title = "MCP Server v1.5.1"
+screenGui.Title = "MCP Server v1.6"
 
 local mainFrame = Instance.new("Frame")
 mainFrame.Size = UDim2.new(1, 0, 1, 0)
@@ -79,7 +79,7 @@ local versionLabel = Instance.new("TextLabel")
 versionLabel.Size = UDim2.new(1, 0, 0, 16)
 versionLabel.Position = UDim2.new(0, 0, 0, 32)
 versionLabel.BackgroundTransparency = 1
-versionLabel.Text = "AI Integration • v1.5.1"
+versionLabel.Text = "AI Integration • v1.6"
 versionLabel.TextColor3 = Color3.fromRGB(191, 219, 254)
 versionLabel.TextScaled = false
 versionLabel.TextSize = 12
@@ -817,8 +817,13 @@ handlers.getInstanceProperties = function(requestData)
 			end
 		end
 
-		if instance:IsA("BasePart") then
+		-- Only Parts have a Shape property; MeshParts do not.
+		if instance:IsA("Part") then
 			properties.Shape = tostring(instance.Shape)
+		end
+
+		-- TopSurface and BottomSurface exist on all BaseParts
+		if instance:IsA("BasePart") then
 			properties.TopSurface = tostring(instance.TopSurface)
 			properties.BottomSurface = tostring(instance.BottomSurface)
 		end
