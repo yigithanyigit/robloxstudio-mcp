@@ -2201,7 +2201,8 @@ handlers.getScriptSource = function(requestData)
 
 	local success, result = pcall(function()
 		local fullSource = instance.Source
-		local totalLineCount = select(2, string.gsub(fullSource, '\n', '\n')) + 1
+		local lines, hasTrailingNewline = splitLines(fullSource)
+		local totalLineCount = #lines
 
 		-- If line range is specified, extract only those lines
 		local sourceToReturn = fullSource
@@ -2209,11 +2210,6 @@ handlers.getScriptSource = function(requestData)
 		local returnedEndLine = totalLineCount
 
 		if startLine or endLine then
-			local lines = {}
-			for line in (fullSource .. '\n'):gmatch("([^\n]*)\n") do
-				table.insert(lines, line)
-			end
-
 			local actualStartLine = math.max(1, startLine or 1)
 			local actualEndLine = math.min(#lines, endLine or #lines)
 
@@ -2223,6 +2219,9 @@ handlers.getScriptSource = function(requestData)
 			end
 
 			sourceToReturn = table.concat(selectedLines, '\n')
+			if hasTrailingNewline and actualEndLine == #lines and sourceToReturn:sub(-1) ~= "\n" then
+				sourceToReturn ..= "\n"
+			end
 			returnedStartLine = actualStartLine
 			returnedEndLine = actualEndLine
 		end
@@ -2245,14 +2244,14 @@ handlers.getScriptSource = function(requestData)
 		-- If the source is very large (>50000 chars) and no range specified,
 		-- return first 1000 lines with truncation notice
 		if not startLine and not endLine and string.len(fullSource) > 50000 then
-			local lines = {}
-			for line in (fullSource .. '\n'):gmatch("([^\n]*)\n") do
-				table.insert(lines, line)
-				if #lines >= 1000 then break end
+			local truncatedLines = {}
+			local maxLines = math.min(1000, #lines)
+			for i = 1, maxLines do
+				table.insert(truncatedLines, lines[i])
 			end
-			resp.source = table.concat(lines, '\n')
+			resp.source = table.concat(truncatedLines, '\n')
 			resp.truncated = true
-			resp.endLine = math.min(1000, totalLineCount)
+			resp.endLine = maxLines
 			resp.note = "Script truncated to first 1000 lines. Use startLine/endLine parameters to read specific sections."
 		end
 
@@ -2373,13 +2372,41 @@ handlers.setScriptSource = function(requestData)
 	end
 end
 
--- Helper function to split source into lines
+-- Helper to normalize line endings and split without inventing an extra trailing line
 local function splitLines(source)
+	local normalized = (source or ""):gsub("\r\n", "\n"):gsub("\r", "\n")
+	local endsWithNewline = normalized:sub(-1) == "\n"
+
 	local lines = {}
-	for line in (source .. '\n'):gmatch("([^\n]*)\n") do
-		table.insert(lines, line)
+	local start = 1
+
+	while true do
+		local newlinePos = string.find(normalized, "\n", start, true)
+		if newlinePos then
+			table.insert(lines, string.sub(normalized, start, newlinePos - 1))
+			start = newlinePos + 1
+		else
+			local remainder = string.sub(normalized, start)
+			if remainder ~= "" or not endsWithNewline then
+				table.insert(lines, remainder)
+			end
+			break
+		end
 	end
-	return lines
+
+	if #lines == 0 then
+		table.insert(lines, "")
+	end
+
+	return lines, endsWithNewline
+end
+
+local function joinLines(lines, hadTrailingNewline)
+	local source = table.concat(lines, "\n")
+	if hadTrailingNewline and source:sub(-1) ~= "\n" then
+		source ..= "\n"
+	end
+	return source
 end
 
 -- Partial Script Editing: Edit specific lines
@@ -2403,8 +2430,7 @@ handlers.editScriptLines = function(requestData)
 	end
 
 	local success, result = pcall(function()
-		local oldSource = instance.Source
-		local lines = splitLines(oldSource)
+		local lines, hadTrailingNewline = splitLines(instance.Source)
 		local totalLines = #lines
 
 		if startLine < 1 or startLine > totalLines then
@@ -2415,7 +2441,7 @@ handlers.editScriptLines = function(requestData)
 		end
 
 		-- Split new content into lines
-		local newLines = splitLines(newContent)
+		local newLines = select(1, splitLines(newContent))
 
 		-- Build new source: lines before + new content + lines after
 		local resultLines = {}
@@ -2435,7 +2461,7 @@ handlers.editScriptLines = function(requestData)
 			table.insert(resultLines, lines[i])
 		end
 
-		local newSource = table.concat(resultLines, '\n')
+		local newSource = joinLines(resultLines, hadTrailingNewline)
 
 		-- Use UpdateSourceAsync for editor compatibility
 		ScriptEditorService:UpdateSourceAsync(instance, function(oldContent)
@@ -2482,8 +2508,7 @@ handlers.insertScriptLines = function(requestData)
 	end
 
 	local success, result = pcall(function()
-		local oldSource = instance.Source
-		local lines = splitLines(oldSource)
+		local lines, hadTrailingNewline = splitLines(instance.Source)
 		local totalLines = #lines
 
 		if afterLine < 0 or afterLine > totalLines then
@@ -2491,7 +2516,7 @@ handlers.insertScriptLines = function(requestData)
 		end
 
 		-- Split new content into lines
-		local newLines = splitLines(newContent)
+		local newLines = select(1, splitLines(newContent))
 
 		-- Build new source
 		local resultLines = {}
@@ -2511,7 +2536,7 @@ handlers.insertScriptLines = function(requestData)
 			table.insert(resultLines, lines[i])
 		end
 
-		local newSource = table.concat(resultLines, '\n')
+		local newSource = joinLines(resultLines, hadTrailingNewline)
 
 		-- Use UpdateSourceAsync for editor compatibility
 		ScriptEditorService:UpdateSourceAsync(instance, function(oldContent)
@@ -2557,8 +2582,7 @@ handlers.deleteScriptLines = function(requestData)
 	end
 
 	local success, result = pcall(function()
-		local oldSource = instance.Source
-		local lines = splitLines(oldSource)
+		local lines, hadTrailingNewline = splitLines(instance.Source)
 		local totalLines = #lines
 
 		if startLine < 1 or startLine > totalLines then
@@ -2579,7 +2603,7 @@ handlers.deleteScriptLines = function(requestData)
 			table.insert(resultLines, lines[i])
 		end
 
-		local newSource = table.concat(resultLines, '\n')
+		local newSource = joinLines(resultLines, hadTrailingNewline)
 
 		-- Use UpdateSourceAsync for editor compatibility
 		ScriptEditorService:UpdateSourceAsync(instance, function(oldContent)
