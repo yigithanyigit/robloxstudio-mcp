@@ -292,6 +292,15 @@ export function createHttpServer(tools: RobloxStudioTools, bridge: BridgeService
     }
   });
 
+  app.post('/mcp/get_selection', async (req, res) => {
+    try {
+      const result = await tools.getSelection();
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  });
+
 
   // Add methods to control and check server status
   (app as any).isPluginConnected = isPluginConnected;

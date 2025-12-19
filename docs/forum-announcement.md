@@ -106,6 +106,7 @@ That's it! The plugin shows "Connected" when ready.
 
 **Project Analysis**
 - Complete project hierarchy and structure
+- Retrieve selection for enhanced context
 - Search across all objects and scripts
 - Property-based filtering and exploration
 
@@ -127,7 +128,7 @@ That's it! The plugin shows "Connected" when ready.
 <details>
 <summary><strong>Complete Tool List (20+ tools)</strong></summary>
 
-**Analysis & Search:** `get_project_structure`, `search_objects`, `search_files`, `search_by_property`
+**Analysis & Search:** `get_project_structure`, `get_selection`, `search_objects`, `search_files`, `search_by_property`
 
 **Properties:** `get_instance_properties`, `set_property`, `mass_set_property`, `mass_get_property`
 

@@ -88,7 +88,7 @@ Attributes & Tags:     "Tag all enemies for CollectionService" / "Set custom att
 <details>
 <summary><strong>Complete Tool List (30+ tools)</strong></summary>
 
-**Analysis & Search:** `get_project_structure`, `search_objects`, `search_files`, `search_by_property`
+**Analysis & Search:** `get_project_structure`, `get_selection`, `search_objects`, `search_files`, `search_by_property`
 
 **Properties:** `get_instance_properties`, `set_property`, `mass_set_property`, `mass_get_property`
 

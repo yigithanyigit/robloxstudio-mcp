@@ -855,6 +855,14 @@ class RobloxStudioMCPServer {
               },
               required: ['tagName']
             }
+          },
+          {
+            name: 'get_selection',
+            description: 'Get all currently selected objects',
+            inputSchema: {
+              type: 'object',
+              properties: {}
+            }
           }
         ]
       };
@@ -962,6 +970,10 @@ class RobloxStudioMCPServer {
             return await this.tools.removeTag((args as any)?.instancePath as string, (args as any)?.tagName as string);
           case 'get_tagged':
             return await this.tools.getTagged((args as any)?.tagName as string);
+
+          // Selection Tools
+          case 'get_selection':
+            return await this.tools.getSelection();
 
           default:
             throw new McpError(

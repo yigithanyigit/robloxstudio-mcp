@@ -768,6 +768,9 @@ processRequest = function(request)
 		return handlers.removeTag(data)
 	elseif endpoint == "/api/get-tagged" then
 		return handlers.getTagged(data)
+	-- Selection endpoints
+	elseif endpoint == "/api/get-selection" then
+		return handlers.getSelection(data)
 	else
 		return { error = "Unknown endpoint: " .. tostring(endpoint) }
 	end
@@ -3049,6 +3052,37 @@ handlers.getTagged = function(requestData)
 	else
 		return { error = "Failed to get tagged instances: " .. tostring(result) }
 	end
+end
+
+-- Selection handlers
+handlers.getSelection = function(requestData)
+	local selection = Selection:Get()
+	
+	if #selection == 0 then
+		return {
+			success = true,
+			selection = {},
+			count = 0,
+			message = "No objects selected"
+		}
+	end
+	
+	local selectedObjects = {}
+	for _, instance in ipairs(selection) do
+		table.insert(selectedObjects, {
+			name = instance.Name,
+			className = instance.ClassName,
+			path = getInstancePath(instance),
+			parent = instance.Parent and getInstancePath(instance.Parent) or nil
+		})
+	end
+	
+	return {
+		success = true,
+		selection = selectedObjects,
+		count = #selection,
+		message = #selection .. " object(s) selected"
+	}
 end
 
 local function updateUIState()
