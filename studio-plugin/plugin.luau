@@ -2263,11 +2263,21 @@ handlers.getScriptSource = function(requestData)
 			returnedEndLine = actualEndLine
 		end
 
+		-- Build numbered source for AI agents to accurately identify line numbers
+		local numberedLines = {}
+		local linesToNumber = startLine and select(1, splitLines(sourceToReturn)) or lines
+		local lineOffset = returnedStartLine - 1
+		for i, line in ipairs(linesToNumber) do
+			table.insert(numberedLines, (i + lineOffset) .. ": " .. line)
+		end
+		local numberedSource = table.concat(numberedLines, "\n")
+
 		local resp = {
 			instancePath = instancePath,
 			className = instance.ClassName,
 			name = instance.Name,
 			source = sourceToReturn,
+			numberedSource = numberedSource,
 			sourceLength = string.len(fullSource),
 			lineCount = totalLineCount,
 			-- Line range info
@@ -2282,11 +2292,14 @@ handlers.getScriptSource = function(requestData)
 		-- return first 1000 lines with truncation notice
 		if not startLine and not endLine and string.len(fullSource) > 50000 then
 			local truncatedLines = {}
+			local truncatedNumberedLines = {}
 			local maxLines = math.min(1000, #lines)
 			for i = 1, maxLines do
 				table.insert(truncatedLines, lines[i])
+				table.insert(truncatedNumberedLines, i .. ": " .. lines[i])
 			end
 			resp.source = table.concat(truncatedLines, '\n')
+			resp.numberedSource = table.concat(truncatedNumberedLines, '\n')
 			resp.truncated = true
 			resp.endLine = maxLines
 			resp.note = "Script truncated to first 1000 lines. Use startLine/endLine parameters to read specific sections."

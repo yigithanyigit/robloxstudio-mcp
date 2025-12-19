@@ -55,16 +55,16 @@ class RobloxStudioMCPServer {
     this.server.setRequestHandler(ListToolsRequestSchema, async () => {
       return {
         tools: [
-          // File System Tools
+          // Instance Hierarchy Tools (NOT local filesystem - these operate on Roblox Studio instances)
           {
             name: 'get_file_tree',
-            description: 'Get complete hierarchy of the Roblox Studio project with script types, models, and folders',
+            description: 'Get the Roblox instance hierarchy tree from Roblox Studio. Returns game instances (Parts, Scripts, Models, Folders, etc.) as a tree structure. NOTE: This operates on Roblox Studio instances, NOT local filesystem files.',
             inputSchema: {
               type: 'object',
               properties: {
                 path: {
                   type: 'string',
-                  description: 'Optional path to start from (defaults to workspace root)',
+                  description: 'Roblox instance path to start from using dot notation (e.g., "game.Workspace", "game.ServerScriptService"). Defaults to game root if empty.',
                   default: ''
                 }
               }
@@ -72,18 +72,18 @@ class RobloxStudioMCPServer {
           },
           {
             name: 'search_files',
-            description: 'Find files by name, type, or content patterns',
+            description: 'Search for Roblox instances by name, class type, or script content. NOTE: This searches Roblox Studio instances, NOT local filesystem files.',
             inputSchema: {
               type: 'object',
               properties: {
                 query: {
                   type: 'string',
-                  description: 'Search query (name, type, or content pattern)'
+                  description: 'Search query - instance name, class type (e.g., "Script", "Part"), or Lua code pattern'
                 },
                 searchType: {
                   type: 'string',
                   enum: ['name', 'type', 'content'],
-                  description: 'Type of search to perform',
+                  description: 'Type of search: "name" for instance names, "type" for class names, "content" for script source code',
                   default: 'name'
                 }
               },
@@ -139,13 +139,13 @@ class RobloxStudioMCPServer {
           // Property & Instance Tools
           {
             name: 'get_instance_properties',
-            description: 'Get all properties of a specific instance',
+            description: 'Get all properties of a specific Roblox instance in Studio',
             inputSchema: {
               type: 'object',
               properties: {
                 instancePath: {
                   type: 'string',
-                  description: 'Path to the instance'
+                  description: 'Roblox instance path using dot notation (e.g., "game.Workspace.Part", "game.ServerScriptService.MainScript", "game.ReplicatedStorage.ModuleScript")'
                 }
               },
               required: ['instancePath']
@@ -153,13 +153,13 @@ class RobloxStudioMCPServer {
           },
           {
             name: 'get_instance_children',
-            description: 'Get child objects and their types',
+            description: 'Get child instances and their class types from a Roblox parent instance',
             inputSchema: {
               type: 'object',
               properties: {
                 instancePath: {
                   type: 'string',
-                  description: 'Path to the parent instance'
+                  description: 'Roblox instance path using dot notation (e.g., "game.Workspace", "game.ServerScriptService")'
                 }
               },
               required: ['instancePath']
@@ -602,16 +602,16 @@ class RobloxStudioMCPServer {
               required: ['paths', 'propertyName', 'operation', 'value']
             }
           },
-          // Script Management Tools
+          // Script Management Tools (for Roblox Studio scripts - NOT local files)
           {
             name: 'get_script_source',
-            description: 'Get the source code of a script object (LocalScript, Script, or ModuleScript). For large scripts (>1500 lines), use startLine/endLine to read specific sections and avoid token limits.',
+            description: 'Get the source code of a Roblox script (LocalScript, Script, or ModuleScript). Returns both "source" (raw code) and "numberedSource" (with line numbers prefixed like "1: code"). Use numberedSource to accurately identify line numbers for editing. For large scripts (>1500 lines), use startLine/endLine to read specific sections.',
             inputSchema: {
               type: 'object',
               properties: {
                 instancePath: {
                   type: 'string',
-                  description: 'Path to the script instance (e.g., "game.ServerScriptService.MainScript")'
+                  description: 'Roblox instance path to the script using dot notation (e.g., "game.ServerScriptService.MainScript", "game.StarterPlayer.StarterPlayerScripts.LocalScript")'
                 },
                 startLine: {
                   type: 'number',
@@ -627,13 +627,13 @@ class RobloxStudioMCPServer {
           },
           {
             name: 'set_script_source',
-            description: 'Set the entire source code of a script using ScriptEditorService:UpdateSourceAsync (works with open editors). For partial edits, prefer edit_script_lines, insert_script_lines, or delete_script_lines.',
+            description: 'Replace the entire source code of a Roblox script. Uses ScriptEditorService:UpdateSourceAsync (works with open editors). For partial edits, prefer edit_script_lines, insert_script_lines, or delete_script_lines.',
             inputSchema: {
               type: 'object',
               properties: {
                 instancePath: {
                   type: 'string',
-                  description: 'Path to the script instance (e.g., "game.ServerScriptService.MainScript")'
+                  description: 'Roblox instance path to the script (e.g., "game.ServerScriptService.MainScript")'
                 },
                 source: {
                   type: 'string',
@@ -643,28 +643,28 @@ class RobloxStudioMCPServer {
               required: ['instancePath', 'source']
             }
           },
-          // Partial Script Editing Tools
+          // Partial Script Editing Tools - use "numberedSource" from get_script_source to identify correct line numbers
           {
             name: 'edit_script_lines',
-            description: 'Replace specific lines in a script without rewriting the entire source. Ideal for making targeted changes to large scripts.',
+            description: 'Replace specific lines in a Roblox script without rewriting the entire source. IMPORTANT: Use the "numberedSource" field from get_script_source to identify the correct line numbers. Lines are 1-indexed and ranges are inclusive.',
             inputSchema: {
               type: 'object',
               properties: {
                 instancePath: {
                   type: 'string',
-                  description: 'Path to the script instance'
+                  description: 'Roblox instance path to the script (e.g., "game.ServerScriptService.MainScript")'
                 },
                 startLine: {
                   type: 'number',
-                  description: 'First line to replace (1-indexed)'
+                  description: 'First line to replace (1-indexed). Get this from the "numberedSource" field.'
                 },
                 endLine: {
                   type: 'number',
-                  description: 'Last line to replace (inclusive)'
+                  description: 'Last line to replace (inclusive). Get this from the "numberedSource" field.'
                 },
                 newContent: {
                   type: 'string',
-                  description: 'New content to replace the specified lines (can be multiple lines)'
+                  description: 'New content to replace the specified lines (can be multiple lines separated by newlines)'
                 }
               },
               required: ['instancePath', 'startLine', 'endLine', 'newContent']
@@ -672,22 +672,22 @@ class RobloxStudioMCPServer {
           },
           {
             name: 'insert_script_lines',
-            description: 'Insert new lines into a script at a specific position without modifying existing code.',
+            description: 'Insert new lines into a Roblox script at a specific position. IMPORTANT: Use the "numberedSource" field from get_script_source to identify the correct line numbers.',
             inputSchema: {
               type: 'object',
               properties: {
                 instancePath: {
                   type: 'string',
-                  description: 'Path to the script instance'
+                  description: 'Roblox instance path to the script (e.g., "game.ServerScriptService.MainScript")'
                 },
                 afterLine: {
                   type: 'number',
-                  description: 'Insert after this line number (0 = insert at beginning, 1 = after first line)',
+                  description: 'Insert after this line number (0 = insert at very beginning, 1 = after first line). Get line numbers from "numberedSource".',
                   default: 0
                 },
                 newContent: {
                   type: 'string',
-                  description: 'Content to insert (can be multiple lines)'
+                  description: 'Content to insert (can be multiple lines separated by newlines)'
                 }
               },
               required: ['instancePath', 'newContent']
@@ -695,36 +695,36 @@ class RobloxStudioMCPServer {
           },
           {
             name: 'delete_script_lines',
-            description: 'Delete specific lines from a script.',
+            description: 'Delete specific lines from a Roblox script. IMPORTANT: Use the "numberedSource" field from get_script_source to identify the correct line numbers.',
             inputSchema: {
               type: 'object',
               properties: {
                 instancePath: {
                   type: 'string',
-                  description: 'Path to the script instance'
+                  description: 'Roblox instance path to the script (e.g., "game.ServerScriptService.MainScript")'
                 },
                 startLine: {
                   type: 'number',
-                  description: 'First line to delete (1-indexed)'
+                  description: 'First line to delete (1-indexed). Get this from the "numberedSource" field.'
                 },
                 endLine: {
                   type: 'number',
-                  description: 'Last line to delete (inclusive)'
+                  description: 'Last line to delete (inclusive). Get this from the "numberedSource" field.'
                 }
               },
               required: ['instancePath', 'startLine', 'endLine']
             }
           },
-          // Attribute Tools
+          // Attribute Tools (for Roblox instance attributes)
           {
             name: 'get_attribute',
-            description: 'Get a single attribute value from an instance',
+            description: 'Get a single attribute value from a Roblox instance',
             inputSchema: {
               type: 'object',
               properties: {
                 instancePath: {
                   type: 'string',
-                  description: 'Path to the instance'
+                  description: 'Roblox instance path using dot notation (e.g., "game.Workspace.Part", "game.ServerStorage.DataStore")'
                 },
                 attributeName: {
                   type: 'string',
@@ -736,13 +736,13 @@ class RobloxStudioMCPServer {
           },
           {
             name: 'set_attribute',
-            description: 'Set an attribute value on an instance. Supports string, number, boolean, Vector3, Color3, UDim2, and BrickColor.',
+            description: 'Set an attribute value on a Roblox instance. Supports string, number, boolean, Vector3, Color3, UDim2, and BrickColor.',
             inputSchema: {
               type: 'object',
               properties: {
                 instancePath: {
                   type: 'string',
-                  description: 'Path to the instance'
+                  description: 'Roblox instance path using dot notation (e.g., "game.Workspace.Part")'
                 },
                 attributeName: {
                   type: 'string',
@@ -761,13 +761,13 @@ class RobloxStudioMCPServer {
           },
           {
             name: 'get_attributes',
-            description: 'Get all attributes on an instance',
+            description: 'Get all attributes on a Roblox instance',
             inputSchema: {
               type: 'object',
               properties: {
                 instancePath: {
                   type: 'string',
-                  description: 'Path to the instance'
+                  description: 'Roblox instance path using dot notation (e.g., "game.Workspace.Part")'
                 }
               },
               required: ['instancePath']
@@ -775,13 +775,13 @@ class RobloxStudioMCPServer {
           },
           {
             name: 'delete_attribute',
-            description: 'Delete an attribute from an instance',
+            description: 'Delete an attribute from a Roblox instance',
             inputSchema: {
               type: 'object',
               properties: {
                 instancePath: {
                   type: 'string',
-                  description: 'Path to the instance'
+                  description: 'Roblox instance path using dot notation (e.g., "game.Workspace.Part")'
                 },
                 attributeName: {
                   type: 'string',
@@ -791,16 +791,16 @@ class RobloxStudioMCPServer {
               required: ['instancePath', 'attributeName']
             }
           },
-          // Tag Tools (CollectionService)
+          // Tag Tools (CollectionService) - for Roblox instance tags
           {
             name: 'get_tags',
-            description: 'Get all tags on an instance',
+            description: 'Get all CollectionService tags on a Roblox instance',
             inputSchema: {
               type: 'object',
               properties: {
                 instancePath: {
                   type: 'string',
-                  description: 'Path to the instance'
+                  description: 'Roblox instance path using dot notation (e.g., "game.Workspace.Part")'
                 }
               },
               required: ['instancePath']
@@ -808,13 +808,13 @@ class RobloxStudioMCPServer {
           },
           {
             name: 'add_tag',
-            description: 'Add a tag to an instance (uses CollectionService)',
+            description: 'Add a CollectionService tag to a Roblox instance',
             inputSchema: {
               type: 'object',
               properties: {
                 instancePath: {
                   type: 'string',
-                  description: 'Path to the instance'
+                  description: 'Roblox instance path using dot notation (e.g., "game.Workspace.Part")'
                 },
                 tagName: {
                   type: 'string',
@@ -826,13 +826,13 @@ class RobloxStudioMCPServer {
           },
           {
             name: 'remove_tag',
-            description: 'Remove a tag from an instance',
+            description: 'Remove a CollectionService tag from a Roblox instance',
             inputSchema: {
               type: 'object',
               properties: {
                 instancePath: {
                   type: 'string',
-                  description: 'Path to the instance'
+                  description: 'Roblox instance path using dot notation (e.g., "game.Workspace.Part")'
                 },
                 tagName: {
                   type: 'string',
