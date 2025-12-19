@@ -20,7 +20,7 @@
 
 **Connect AI assistants like Claude to your Roblox Studio projects**
 
-*20+ tools for project analysis, script editing, and bulk operations*
+*30+ tools for project analysis, script editing, attributes, tags, and bulk operations*
 
 </div>
 
@@ -28,7 +28,7 @@
 
 ## What is This?
 
-An MCP server that connects AI assistants (like Claude) to Roblox Studio through a local bridge and plugin. It lets AI explore your game’s structure, read and edit scripts (including ModuleScripts), and perform safe, bulk changes—all locally.
+An MCP server that connects AI assistants (like Claude) to Roblox Studio through a local bridge and plugin. It lets AI explore your game’s structure, read and edit scripts (including ModuleScripts), and perform safe, bulk changes, all locally.
 
 ---
 
@@ -66,25 +66,27 @@ The plugin shows "Connected" when ready.
 
 ```text
 Project understanding:  "What's the structure of this game?"
-Debugging:            "Find possible memory leaks or deprecated APIs"
-Mass operations:      "Create 50 test NPCs and position them in a grid"
-Script work:          "Explain this weapon system" / "Optimize this movement code"
+Debugging:             "Find possible memory leaks or deprecated APIs"
+Mass operations:       "Create 50 test NPCs and position them in a grid"
+Script work:           "Explain this weapon system" / "Optimize this movement code"
+Attributes & Tags:     "Tag all enemies for CollectionService" / "Set custom attributes"
 ```
 
 ## Why Use This?
 
 - Understand and navigate large projects quickly
 - Apply consistent changes at scale (properties, duplication, creation)
-- Read and edit script sources programmatically—safely via Studio
+- Read and edit script sources programmatically and safely via Studio
 
 ## Key Features
 
 - Project analysis and search across services, objects, and scripts
-- Script management (read/write) for Script, LocalScript, and ModuleScript
+- Script management (read/write/partial edit) for Script, LocalScript, and ModuleScript
+- Attributes and Tags (CollectionService) support
 - Mass operations (property edits, smart/mass duplication, calculated/relative properties)
 
 <details>
-<summary><strong>Complete Tool List (20+ tools)</strong></summary>
+<summary><strong>Complete Tool List (30+ tools)</strong></summary>
 
 **Analysis & Search:** `get_project_structure`, `search_objects`, `search_files`, `search_by_property`
 
@@ -92,7 +94,11 @@ Script work:          "Explain this weapon system" / "Optimize this movement cod
 
 **Creation:** `create_object`, `mass_create_objects`, `smart_duplicate`, `mass_duplicate`
 
-**Scripts:** `get_script_source`, `set_script_source`
+**Scripts:** `get_script_source`, `set_script_source`, `edit_script_lines`, `insert_script_lines`, `delete_script_lines`
+
+**Attributes:** `get_attribute`, `set_attribute`, `get_attributes`, `delete_attribute`
+
+**Tags:** `get_tags`, `add_tag`, `remove_tag`, `get_tagged`
 
 **Advanced:** `set_calculated_property`, `set_relative_property`, `get_class_info`
 
@@ -108,17 +114,18 @@ Script work:          "Explain this weapon system" / "Optimize this movement cod
 
 ## Latest Updates
 
-### v1.6.0
-- ModuleScript support (Script, LocalScript, ModuleScript)
-- Content search includes ModuleScripts
-- `set_property` supports `Source` on any `LuaSourceContainer`
-- HTTP parity: `/mcp/get_script_source`, `/mcp/set_script_source`
+### v1.7.0
+- **Partial Script Editing:** `edit_script_lines`, `insert_script_lines`, `delete_script_lines` for targeted edits without rewriting entire scripts
+- **Attributes Support:** `get_attribute`, `set_attribute`, `get_attributes`, `delete_attribute` with Vector3, Color3, UDim2, BrickColor support
+- **Tags (CollectionService):** `get_tags`, `add_tag`, `remove_tag`, `get_tagged` for tag-based workflows
+- **Improved Script Handling:** `get_script_source` now supports `startLine`/`endLine` for reading sections of large scripts
+- Uses ScriptEditorService:UpdateSourceAsync for editing scripts open in tabs
 
 ---
 
 ## Get Started
 
-1. **[Install Studio Plugin](https://create.roblox.com/store/asset/75577477776988)**
+1. **[Install Studio Plugin](https://github.com/boshyxd/robloxstudio-mcp/releases)**
 2. **Enable HTTP Requests** (Game Settings → Security)  
 3. **Connect AI:** `claude mcp add robloxstudio -- npx -y robloxstudio-mcp`
 

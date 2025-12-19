@@ -1,7 +1,7 @@
 <roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.roblox.com/roblox.xsd" version="4">
 	<External>null</External>
 	<External>nil</External>
-	<Item class="Script" referent="RBXD7D74574ADC7488DA9C9D8F74B767E09">
+	<Item class="Script" referent="RBX52D86AAF2C054E469C9D99447CDBC64D">
 		<Properties>
 			<ProtectedString name="Source"><![CDATA[local HttpService = game:GetService("HttpService")
 local StudioService = game:GetService("StudioService")
@@ -32,7 +32,7 @@ local pluginState = {
 	mcpWaitStartTime = nil,
 }
 
-local screenGui = plugin:CreateDockWidgetPluginGui(
+local screenGui = plugin:CreateDockWidgetPluginGuiAsync(
 	"MCPServerInterface",
 	DockWidgetPluginGuiInfo.new(Enum.InitialDockState.Float, false, false, 400, 500, 350, 450)
 )
@@ -429,6 +429,43 @@ local function getInstancePath(instance)
 	end
 
 	return "game." .. table.concat(path, ".")
+end
+
+-- Helper to normalize line endings and split without inventing an extra trailing line
+local function splitLines(source)
+	local normalized = (source or ""):gsub("\r\n", "\n"):gsub("\r", "\n")
+	local endsWithNewline = normalized:sub(-1) == "\n"
+
+	local lines = {}
+	local start = 1
+
+	while true do
+		local newlinePos = string.find(normalized, "\n", start, true)
+		if newlinePos then
+			table.insert(lines, string.sub(normalized, start, newlinePos - 1))
+			start = newlinePos + 1
+		else
+			local remainder = string.sub(normalized, start)
+			if remainder ~= "" or not endsWithNewline then
+				table.insert(lines, remainder)
+			end
+			break
+		end
+	end
+
+	if #lines == 0 then
+		table.insert(lines, "")
+	end
+
+	return lines, endsWithNewline
+end
+
+local function joinLines(lines, hadTrailingNewline)
+	local source = table.concat(lines, "\n")
+	if hadTrailingNewline and source:sub(-1) ~= "\n" then
+		source ..= "\n"
+	end
+	return source
 end
 
 local processRequest
@@ -2231,11 +2268,21 @@ handlers.getScriptSource = function(requestData)
 			returnedEndLine = actualEndLine
 		end
 
+		-- Build numbered source for AI agents to accurately identify line numbers
+		local numberedLines = {}
+		local linesToNumber = startLine and select(1, splitLines(sourceToReturn)) or lines
+		local lineOffset = returnedStartLine - 1
+		for i, line in ipairs(linesToNumber) do
+			table.insert(numberedLines, (i + lineOffset) .. ": " .. line)
+		end
+		local numberedSource = table.concat(numberedLines, "\n")
+
 		local resp = {
 			instancePath = instancePath,
 			className = instance.ClassName,
 			name = instance.Name,
 			source = sourceToReturn,
+			numberedSource = numberedSource,
 			sourceLength = string.len(fullSource),
 			lineCount = totalLineCount,
 			-- Line range info
@@ -2250,11 +2297,14 @@ handlers.getScriptSource = function(requestData)
 		-- return first 1000 lines with truncation notice
 		if not startLine and not endLine and string.len(fullSource) > 50000 then
 			local truncatedLines = {}
+			local truncatedNumberedLines = {}
 			local maxLines = math.min(1000, #lines)
 			for i = 1, maxLines do
 				table.insert(truncatedLines, lines[i])
+				table.insert(truncatedNumberedLines, i .. ": " .. lines[i])
 			end
 			resp.source = table.concat(truncatedLines, '\n')
+			resp.numberedSource = table.concat(truncatedNumberedLines, '\n')
 			resp.truncated = true
 			resp.endLine = maxLines
 			resp.note = "Script truncated to first 1000 lines. Use startLine/endLine parameters to read specific sections."
@@ -2291,11 +2341,12 @@ handlers.setScriptSource = function(requestData)
 	end
 
 	-- Try UpdateSourceAsync first (works with open script editors)
+	local sourceToSet = newSource :: string
 	local updateSuccess, updateResult = pcall(function()
 		local oldSourceLength = string.len(instance.Source)
 
 		ScriptEditorService:UpdateSourceAsync(instance, function(oldContent)
-			return newSource
+			return sourceToSet
 		end)
 
 		ChangeHistoryService:SetWaypoint("Set script source: " .. instance.Name)
@@ -2304,7 +2355,7 @@ handlers.setScriptSource = function(requestData)
 			success = true,
 			instancePath = instancePath,
 			oldSourceLength = oldSourceLength,
-			newSourceLength = string.len(newSource),
+			newSourceLength = string.len(sourceToSet),
 			method = "UpdateSourceAsync",
 			message = "Script source updated successfully (editor-safe)"
 		}
@@ -2317,7 +2368,7 @@ handlers.setScriptSource = function(requestData)
 	-- Fallback to direct assignment if UpdateSourceAsync fails
 	local directSuccess, directResult = pcall(function()
 		local oldSource = instance.Source
-		instance.Source = newSource
+		instance.Source = sourceToSet
 
 		ChangeHistoryService:SetWaypoint("Set script source: " .. instance.Name)
 
@@ -2325,7 +2376,7 @@ handlers.setScriptSource = function(requestData)
 			success = true,
 			instancePath = instancePath,
 			oldSourceLength = string.len(oldSource),
-			newSourceLength = string.len(newSource),
+			newSourceLength = string.len(sourceToSet),
 			method = "direct",
 			message = "Script source updated successfully (direct assignment)"
 		}
@@ -2348,7 +2399,7 @@ handlers.setScriptSource = function(requestData)
 
 		local newScript = Instance.new(className)
 		newScript.Name = name
-		newScript.Source = newSource
+		newScript.Source = sourceToSet
 		if wasBaseScript then
 			newScript.Enabled = enabled
 		end
@@ -2375,43 +2426,6 @@ handlers.setScriptSource = function(requestData)
 				". Replace method failed: " .. tostring(replaceResult)
 		}
 	end
-end
-
--- Helper to normalize line endings and split without inventing an extra trailing line
-local function splitLines(source)
-	local normalized = (source or ""):gsub("\r\n", "\n"):gsub("\r", "\n")
-	local endsWithNewline = normalized:sub(-1) == "\n"
-
-	local lines = {}
-	local start = 1
-
-	while true do
-		local newlinePos = string.find(normalized, "\n", start, true)
-		if newlinePos then
-			table.insert(lines, string.sub(normalized, start, newlinePos - 1))
-			start = newlinePos + 1
-		else
-			local remainder = string.sub(normalized, start)
-			if remainder ~= "" or not endsWithNewline then
-				table.insert(lines, remainder)
-			end
-			break
-		end
-	end
-
-	if #lines == 0 then
-		table.insert(lines, "")
-	end
-
-	return lines, endsWithNewline
-end
-
-local function joinLines(lines, hadTrailingNewline)
-	local source = table.concat(lines, "\n")
-	if hadTrailingNewline and source:sub(-1) ~= "\n" then
-		source ..= "\n"
-	end
-	return source
 end
 
 -- Partial Script Editing: Edit specific lines
@@ -3114,7 +3128,7 @@ updateUIState()
 			<bool name="Disabled">false</bool>
 			<Content name="LinkedSource"><null></null></Content>
 			<token name="RunContext">0</token>
-			<string name="ScriptGuid">{C6A99443-416A-4EDC-9990-FBCBDA7190AE}</string>
+			<string name="ScriptGuid">{A3844B96-6238-4336-B55B-55E8284F81E7}</string>
 			<BinaryString name="AttributesSerialize"></BinaryString>
 			<SecurityCapabilities name="Capabilities">0</SecurityCapabilities>
 			<bool name="DefinesCapabilities">false</bool>
