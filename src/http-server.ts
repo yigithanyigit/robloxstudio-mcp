@@ -30,12 +30,12 @@ export function createHttpServer(tools: RobloxStudioTools, bridge: BridgeService
   };
 
   const isMCPServerActive = () => {
-    return mcpServerActive && (Date.now() - lastMCPActivity < 15000); // 15 second timeout
+    return mcpServerActive && (Date.now() - lastMCPActivity < 3600000); // 60 minutes timeout
   };
 
   const isPluginConnected = () => {
-    // Consider plugin disconnected if no activity for 10 seconds
-    return pluginConnected && (Date.now() - lastPluginActivity < 10000);
+    // Consider plugin disconnected if no activity for 5 minutes
+    return pluginConnected && (Date.now() - lastPluginActivity < 300000);
   };
 
   app.use(cors());

@@ -19,7 +19,7 @@ local pluginState = {
 	pollInterval = 0.5,
 	lastPoll = 0,
 	consecutiveFailures = 0,
-	maxFailuresBeforeError = 50,
+	maxFailuresBeforeError = 7200, -- Increased to handle long AFK (~1 hour)
 	lastSuccessfulConnection = 0,
 	currentRetryDelay = 0.5,
 	maxRetryDelay = 5,
@@ -27,6 +27,7 @@ local pluginState = {
 	-- UI step tracking
 	lastHttpOk = false,
 	mcpWaitStartTime = nil,
+	isPolling = false, -- Prevent concurrent poll requests
 }
 
 local screenGui = plugin:CreateDockWidgetPluginGuiAsync(
@@ -588,6 +589,13 @@ local function pollForRequests()
 		return
 	end
 
+	-- Prevent concurrent polling which can duplicate connections
+	if pluginState.isPolling then
+		return
+	end
+	
+	pluginState.isPolling = true
+
 	local success, result = pcall(function()
 		return HttpService:RequestAsync({
 			Url = pluginState.serverUrl .. "/poll",
@@ -597,6 +605,8 @@ local function pollForRequests()
 			},
 		})
 	end)
+
+	pluginState.isPolling = false
 
 	if success and (result.Success or result.StatusCode == 503) then
 		pluginState.consecutiveFailures = 0
@@ -649,8 +659,11 @@ local function pollForRequests()
 		end
 
 		if data.request and mcpConnected then
-			local response = processRequest(data.request)
-			sendResponse(data.requestId, response)
+			-- Process request in a separate thread to not block polling loop
+			task.spawn(function()
+				local response = processRequest(data.request)
+				sendResponse(data.requestId, response)
+			end)
 		end
 	elseif pluginState.isActive then
 		pluginState.consecutiveFailures = pluginState.consecutiveFailures + 1
@@ -716,9 +729,8 @@ local function pollForRequests()
 			troubleshootLabel.Visible = false
 			startPulseAnimation()
 		end
+	end
 end
-end
-
 sendResponse = function(requestId, responseData)
 	pcall(function()
 		HttpService:RequestAsync({
