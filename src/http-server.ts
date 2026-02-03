@@ -30,7 +30,12 @@ export function createHttpServer(tools: RobloxStudioTools, bridge: BridgeService
   };
 
   const isMCPServerActive = () => {
-    return mcpServerActive && (Date.now() - lastMCPActivity < 15000); // 15 second timeout
+    if (!mcpServerActive) return false;
+    const now = Date.now();
+    const mcpRecent = (now - lastMCPActivity) < 15000;
+    const pluginPollingRecent = (now - lastPluginActivity) < 15000;
+    // Consider bridge connected if MCP had recent activity OR plugin is polling (reconnect after Studio restart)
+    return mcpRecent || pluginPollingRecent;
   };
 
   const isPluginConnected = () => {
@@ -85,6 +90,9 @@ export function createHttpServer(tools: RobloxStudioTools, bridge: BridgeService
       pluginConnected = true;
     }
     lastPluginActivity = Date.now();
+    // Refresh MCP activity on every poll so that after Studio reconnects (e.g. was closed),
+    // the first poll makes isMCPServerActive() true again and the bridge reconnects.
+    trackMCPActivity();
     
     if (!isMCPServerActive()) {
       res.status(503).json({ 
