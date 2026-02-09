@@ -18,17 +18,17 @@ An MCP server that lets AI explore your game structure, read/edit scripts, and p
 
 **Gemini:**
 ```bash
-gemini mcp add robloxstudio npx --trust -- -y robloxstudio-mcp
+gemini mcp add robloxstudio npx --trust -- -y robloxstudio-mcp@latest
 ```
 
 **Claude:**
 ```bash
-claude mcp add robloxstudio -- npx robloxstudio-mcp
+claude mcp add robloxstudio -- npx -y robloxstudio-mcp@latest
 ```
 
 **Codex:**
 ```bash
-codex mcp add robloxstudio -- npx -y robloxstudio-mcp
+codex mcp add robloxstudio -- npx -y robloxstudio-mcp@latest
 ```
 
 Plugin shows "Connected" when ready.
@@ -41,7 +41,7 @@ Plugin shows "Connected" when ready.
   "mcpServers": {
     "robloxstudio-mcp": {
       "command": "npx",
-      "args": ["-y", "robloxstudio-mcp"]
+      "args": ["-y", "robloxstudio-mcp@latest"]
     }
   }
 }
