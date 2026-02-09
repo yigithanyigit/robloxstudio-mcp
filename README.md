@@ -1,6 +1,6 @@
 # Roblox Studio MCP Server
 
-**Connect AI assistants like Claude to Roblox Studio**
+**Connect AI assistants like Claude and Gemini to Roblox Studio**
 
 [![NPM Version](https://img.shields.io/npm/v/robloxstudio-mcp)](https://www.npmjs.com/package/robloxstudio-mcp)
 
@@ -16,6 +16,12 @@ An MCP server that lets AI explore your game structure, read/edit scripts, and p
 2. Enable **Allow HTTP Requests** in Game Settings > Security
 3. Connect your AI:
 
+**Gemini:**
+```bash
+gemini mcp add robloxstudio npx --trust -- -y robloxstudio-mcp
+```
+
+**Claude:**
 ```bash
 claude mcp add robloxstudio -- npx robloxstudio-mcp
 ```
@@ -55,6 +61,6 @@ Ask things like: *"What's the structure of this game?"*, *"Find scripts with dep
 
 ---
 
-**v1.9.0** — 37+ tools, full HTTP API, improved stability
+**v1.9.0** — 37+ tools, asset property fetching, full HTTP API, improved stability
 
 [Report Issues](https://github.com/boshyxd/robloxstudio-mcp/issues) | [DevForum](https://devforum.roblox.com/t/v180-roblox-studio-mcp-speed-up-your-workflow-by-letting-ai-read-paths-and-properties/3707071) | MIT Licensed

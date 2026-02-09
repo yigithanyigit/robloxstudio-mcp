@@ -27,6 +27,7 @@ local pluginState = {
 	-- UI step tracking
 	lastHttpOk = false,
 	mcpWaitStartTime = nil,
+	isPolling = false, -- Prevent concurrent poll requests
 }
 
 local screenGui = plugin:CreateDockWidgetPluginGuiAsync(
@@ -610,6 +611,13 @@ local function pollForRequests()
 		return
 	end
 
+	-- Prevent concurrent polling which can duplicate connections
+	if pluginState.isPolling then
+		return
+	end
+	
+	pluginState.isPolling = true
+
 	local success, result = pcall(function()
 		return HttpService:RequestAsync({
 			Url = pluginState.serverUrl .. "/poll",
@@ -619,6 +627,8 @@ local function pollForRequests()
 			},
 		})
 	end)
+
+	pluginState.isPolling = false
 
 	if success and (result.Success or result.StatusCode == 503) then
 		pluginState.consecutiveFailures = 0
@@ -671,8 +681,11 @@ local function pollForRequests()
 		end
 
 		if data.request and mcpConnected then
-			local response = processRequest(data.request)
-			sendResponse(data.requestId, response)
+			-- Process request in a separate thread to not block polling loop
+			task.spawn(function()
+				local response = processRequest(data.request)
+				sendResponse(data.requestId, response)
+			end)
 		end
 	elseif pluginState.isActive then
 		pluginState.consecutiveFailures = pluginState.consecutiveFailures + 1
@@ -738,9 +751,8 @@ local function pollForRequests()
 			troubleshootLabel.Visible = false
 			startPulseAnimation()
 		end
+	end
 end
-end
-
 sendResponse = function(requestId, responseData)
 	pcall(function()
 		HttpService:RequestAsync({
@@ -1151,6 +1163,42 @@ handlers.getInstanceProperties = function(requestData)
 		if instance:IsA("BasePart") then
 			properties.TopSurface = tostring(instance.TopSurface)
 			properties.BottomSurface = tostring(instance.BottomSurface)
+		end
+
+		-- Asset IDs for Meshes, Sounds, Animations, etc.
+		if instance:IsA("MeshPart") then
+			properties.MeshId = tostring(instance.MeshId)
+			properties.TextureID = tostring(instance.TextureID)
+		end
+
+		if instance:IsA("SpecialMesh") then
+			properties.MeshId = tostring(instance.MeshId)
+			properties.TextureId = tostring(instance.TextureId)
+			properties.MeshType = tostring(instance.MeshType)
+		end
+
+		if instance:IsA("Sound") then
+			properties.SoundId = tostring(instance.SoundId)
+			properties.TimeLength = tostring(instance.TimeLength)
+			properties.IsPlaying = tostring(instance.IsPlaying)
+		end
+
+		if instance:IsA("Animation") then
+			properties.AnimationId = tostring(instance.AnimationId)
+		end
+
+		if instance:IsA("Decal") or instance:IsA("Texture") then
+			properties.Texture = tostring(instance.Texture)
+		end
+
+		if instance:IsA("Shirt") or instance:IsA("Pants") or instance:IsA("ShirtGraphic") then
+			if instance:IsA("ShirtGraphic") then
+				properties.Graphic = tostring(instance.Graphic)
+			elseif instance:IsA("Shirt") then
+				properties.ShirtTemplate = tostring(instance.ShirtTemplate)
+			else
+				properties.PantsTemplate = tostring(instance.PantsTemplate)
+			end
 		end
 
 		properties.ChildCount = tostring(#instance:GetChildren())
