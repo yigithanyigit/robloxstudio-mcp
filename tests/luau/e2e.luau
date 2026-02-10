@@ -18,7 +18,7 @@ local process = require("@lune/process")
 local task = require("@lune/task")
 
 -- Configuration
-local SERVER_URL = "http://localhost:3002"
+local SERVER_URL = "http://localhost:58741"
 local TEST_TIMEOUT = 5 -- seconds
 
 -- Test utilities
