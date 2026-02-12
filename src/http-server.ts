@@ -11,7 +11,7 @@ export function createHttpServer(tools: RobloxStudioTools, bridge: BridgeService
   let mcpServerStartTime = 0;
   let lastPluginActivity = 0;
 
-  // Track MCP server lifecycle
+
   const setMCPServerActive = (active: boolean) => {
     mcpServerActive = active;
     if (active) {
@@ -37,7 +37,7 @@ export function createHttpServer(tools: RobloxStudioTools, bridge: BridgeService
   };
 
   const isPluginConnected = () => {
-    // Consider plugin disconnected if no activity for 10 seconds
+
     return pluginConnected && (Date.now() - lastPluginActivity < 10000);
   };
 
@@ -45,10 +45,10 @@ export function createHttpServer(tools: RobloxStudioTools, bridge: BridgeService
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-  // Health check endpoint
+
   app.get('/health', (req, res) => {
-    res.json({ 
-      status: 'ok', 
+    res.json({
+      status: 'ok',
       service: 'robloxstudio-mcp',
       pluginConnected,
       mcpServerActive: isMCPServerActive(),
@@ -56,27 +56,27 @@ export function createHttpServer(tools: RobloxStudioTools, bridge: BridgeService
     });
   });
 
-  // Plugin readiness endpoint
+
   app.post('/ready', (req, res) => {
-    // Clear any stale pending requests from a previous plugin instance
-    // (e.g. when switching Studio places or reconnecting after a crash)
+
+
     bridge.clearAllPendingRequests();
     pluginConnected = true;
     lastPluginActivity = Date.now();
     res.json({ success: true });
   });
 
-  // Plugin disconnect endpoint
+
   app.post('/disconnect', (req, res) => {
     pluginConnected = false;
-    // Clear any pending requests when plugin disconnects
+
     bridge.clearAllPendingRequests();
     res.json({ success: true });
   });
 
-  // Enhanced status endpoint
+
   app.get('/status', (req, res) => {
-    res.json({ 
+    res.json({
       pluginConnected,
       mcpServerActive: isMCPServerActive(),
       lastMCPActivity,
@@ -84,9 +84,9 @@ export function createHttpServer(tools: RobloxStudioTools, bridge: BridgeService
     });
   });
 
-  // Enhanced polling endpoint for Studio plugin
+
   app.get('/poll', (req, res) => {
-    // Always track that plugin is polling (shows it's trying to connect)
+
     if (!pluginConnected) {
       pluginConnected = true;
     }
@@ -104,14 +104,14 @@ export function createHttpServer(tools: RobloxStudioTools, bridge: BridgeService
 
     const pendingRequest = bridge.getPendingRequest();
     if (pendingRequest) {
-      res.json({ 
-        request: pendingRequest.request, 
+      res.json({
+        request: pendingRequest.request,
         requestId: pendingRequest.requestId,
         mcpConnected: true,
         pluginConnected: true
       });
     } else {
-      res.json({ 
+      res.json({
         request: null,
         mcpConnected: true,
         pluginConnected: true
@@ -119,26 +119,26 @@ export function createHttpServer(tools: RobloxStudioTools, bridge: BridgeService
     }
   });
 
-  // Response endpoint for Studio plugin
+
   app.post('/response', (req, res) => {
     const { requestId, response, error } = req.body;
-    
+
     if (error) {
       bridge.rejectRequest(requestId, error);
     } else {
       bridge.resolveRequest(requestId, response);
     }
-    
+
     res.json({ success: true });
   });
 
-  // Middleware to track MCP activity for all MCP endpoints
+
   app.use('/mcp/*', (req, res, next) => {
     trackMCPActivity();
     next();
   });
 
-  // MCP tool proxy endpoints - these will be called by AI tools
+
   app.post('/mcp/get_file_tree', async (req, res) => {
     try {
       const result = await tools.getFileTree(req.body.path);
@@ -277,7 +277,7 @@ export function createHttpServer(tools: RobloxStudioTools, bridge: BridgeService
     }
   });
 
-  // Script management endpoints (parity with tools)
+
   app.post('/mcp/get_script_source', async (req, res) => {
     try {
       const result = await tools.getScriptSource(req.body.instancePath);
@@ -314,7 +314,7 @@ export function createHttpServer(tools: RobloxStudioTools, bridge: BridgeService
     }
   });
 
-  // Property modification endpoint
+
   app.post('/mcp/set_property', async (req, res) => {
     try {
       const result = await tools.setProperty(req.body.instancePath, req.body.propertyName, req.body.propertyValue);
@@ -324,7 +324,7 @@ export function createHttpServer(tools: RobloxStudioTools, bridge: BridgeService
     }
   });
 
-  // Object creation/deletion endpoints
+
   app.post('/mcp/create_object', async (req, res) => {
     try {
       const result = await tools.createObject(req.body.className, req.body.parent, req.body.name);
@@ -343,7 +343,7 @@ export function createHttpServer(tools: RobloxStudioTools, bridge: BridgeService
     }
   });
 
-  // Smart duplication endpoints
+
   app.post('/mcp/smart_duplicate', async (req, res) => {
     try {
       const result = await tools.smartDuplicate(req.body.instancePath, req.body.count, req.body.options);
@@ -362,7 +362,7 @@ export function createHttpServer(tools: RobloxStudioTools, bridge: BridgeService
     }
   });
 
-  // Calculated/relative property endpoints
+
   app.post('/mcp/set_calculated_property', async (req, res) => {
     try {
       const result = await tools.setCalculatedProperty(req.body.paths, req.body.propertyName, req.body.formula, req.body.variables);
@@ -381,7 +381,7 @@ export function createHttpServer(tools: RobloxStudioTools, bridge: BridgeService
     }
   });
 
-  // Partial script editing endpoints
+
   app.post('/mcp/edit_script_lines', async (req, res) => {
     try {
       const result = await tools.editScriptLines(req.body.instancePath, req.body.startLine, req.body.endLine, req.body.newContent);
@@ -409,7 +409,7 @@ export function createHttpServer(tools: RobloxStudioTools, bridge: BridgeService
     }
   });
 
-  // Attribute endpoints
+
   app.post('/mcp/get_attribute', async (req, res) => {
     try {
       const result = await tools.getAttribute(req.body.instancePath, req.body.attributeName);
@@ -446,7 +446,7 @@ export function createHttpServer(tools: RobloxStudioTools, bridge: BridgeService
     }
   });
 
-  // Tag (CollectionService) endpoints
+
   app.post('/mcp/get_tags', async (req, res) => {
     try {
       const result = await tools.getTags(req.body.instancePath);
@@ -483,7 +483,35 @@ export function createHttpServer(tools: RobloxStudioTools, bridge: BridgeService
     }
   });
 
-  // Add methods to control and check server status
+
+  app.post('/mcp/start_playtest', async (req, res) => {
+    try {
+      const result = await tools.startPlaytest(req.body.mode);
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  });
+
+  app.post('/mcp/stop_playtest', async (req, res) => {
+    try {
+      const result = await tools.stopPlaytest();
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  });
+
+  app.post('/mcp/get_playtest_output', async (req, res) => {
+    try {
+      const result = await tools.getPlaytestOutput();
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
+    }
+  });
+
+
   (app as any).isPluginConnected = isPluginConnected;
   (app as any).setMCPServerActive = setMCPServerActive;
   (app as any).isMCPServerActive = isMCPServerActive;
