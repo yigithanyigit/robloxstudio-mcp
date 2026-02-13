@@ -163,8 +163,12 @@ function pollForRequests(connIndex: number) {
 
 		if (data.request && mcpConnected) {
 			task.spawn(() => {
-				const response = processRequest(data.request!);
-				sendResponse(conn, data.requestId!, response);
+				const [ok, response] = pcall(() => processRequest(data.request!));
+				if (ok) {
+					sendResponse(conn, data.requestId!, response);
+				} else {
+					sendResponse(conn, data.requestId!, { error: tostring(response) });
+				}
 			});
 		}
 	} else if (conn.isActive) {

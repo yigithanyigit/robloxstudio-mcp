@@ -77,14 +77,19 @@ function startPlaytest(requestData: Record<string, unknown>) {
 	cleanupStopListener();
 
 	if (serverPort !== undefined && serverPort > 0) {
-		// HttpEnabled is typed readonly but writable from plugin context
-		(HttpService as unknown as { HttpEnabled: boolean }).HttpEnabled = true;
+		const [injected, injErr] = pcall(() => {
+			// HttpEnabled is typed readonly but writable from plugin context
+			(HttpService as unknown as { HttpEnabled: boolean }).HttpEnabled = true;
 
-		const listener = new Instance("Script");
-		listener.Name = STOP_LISTENER_NAME;
-		listener.Source = buildStopListenerSource(serverPort);
-		listener.Parent = ServerScriptService;
-		stopListenerScript = listener;
+			const listener = new Instance("Script");
+			listener.Name = STOP_LISTENER_NAME;
+			listener.Source = buildStopListenerSource(serverPort);
+			listener.Parent = ServerScriptService;
+			stopListenerScript = listener;
+		});
+		if (!injected) {
+			warn(`[MCP] Failed to inject stop listener: ${injErr}`);
+		}
 	}
 
 	logConnection = LogService.MessageOut.Connect((message, messageType) => {
