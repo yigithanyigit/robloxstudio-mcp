@@ -264,35 +264,18 @@ function activatePlugin(connIndex?: number) {
 
 	const ui = UI.getElements();
 
-	const discoveredPort = discoverPort();
-	if (discoveredPort !== undefined) {
-		conn.port = discoveredPort;
-		conn.serverUrl = `http://localhost:${discoveredPort}`;
-		if (idx === State.getActiveTabIndex()) {
-			ui.urlInput.Text = conn.serverUrl;
-		}
-	} else if (idx === State.getActiveTabIndex()) {
-		conn.serverUrl = ui.urlInput.Text;
-		const [portStr] = conn.serverUrl.match(":(%d+)$");
-		if (portStr) conn.port = tonumber(portStr) ?? conn.port;
-	}
-
 	conn.isActive = true;
 	conn.consecutiveFailures = 0;
 	conn.currentRetryDelay = 0.5;
 	ui.screenGui.Enabled = true;
 
-	if (idx === State.getActiveTabIndex()) UI.updateUIState();
+	if (idx === State.getActiveTabIndex()) {
+		conn.serverUrl = ui.urlInput.Text;
+		const [portStr] = conn.serverUrl.match(":(%d+)$");
+		if (portStr) conn.port = tonumber(portStr) ?? conn.port;
+		UI.updateUIState();
+	}
 	UI.updateTabDot(idx);
-
-	pcall(() => {
-		HttpService.RequestAsync({
-			Url: `${conn.serverUrl}/ready`,
-			Method: "POST",
-			Headers: { "Content-Type": "application/json" },
-			Body: HttpService.JSONEncode({ pluginReady: true, timestamp: tick() }),
-		});
-	});
 
 	if (!conn.heartbeatConnection) {
 		conn.heartbeatConnection = RunService.Heartbeat.Connect(() => {
@@ -304,6 +287,26 @@ function activatePlugin(connIndex?: number) {
 			}
 		});
 	}
+
+	task.spawn(() => {
+		const discoveredPort = discoverPort();
+		if (discoveredPort !== undefined) {
+			conn.port = discoveredPort;
+			conn.serverUrl = `http://localhost:${discoveredPort}`;
+			if (idx === State.getActiveTabIndex()) {
+				ui.urlInput.Text = conn.serverUrl;
+			}
+		}
+
+		pcall(() => {
+			HttpService.RequestAsync({
+				Url: `${conn.serverUrl}/ready`,
+				Method: "POST",
+				Headers: { "Content-Type": "application/json" },
+				Body: HttpService.JSONEncode({ pluginReady: true, timestamp: tick() }),
+			});
+		});
+	});
 }
 
 function deactivatePlugin(connIndex?: number) {

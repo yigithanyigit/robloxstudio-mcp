@@ -21,6 +21,7 @@ let stopListenerScript: Script | undefined;
 function buildStopListenerSource(port: number): string {
 	return `local HttpService = game:GetService("HttpService")
 local StudioTestService = game:GetService("StudioTestService")
+warn("[MCP] Stop listener started, polling port ${port}")
 while true do
 	local ok, res = pcall(function()
 		return HttpService:RequestAsync({
@@ -28,12 +29,20 @@ while true do
 			Method = "GET",
 		})
 	end)
-	if ok and res.Success then
+	if not ok then
+		warn("[MCP] HTTP request failed: " .. tostring(res))
+	elseif not res.Success then
+		warn("[MCP] HTTP " .. tostring(res.StatusCode) .. ": " .. tostring(res.Body))
+	else
 		local dok, data = pcall(function()
 			return HttpService:JSONDecode(res.Body)
 		end)
 		if dok and data.shouldStop then
-			pcall(function() StudioTestService:EndTest("stopped_by_mcp") end)
+			warn("[MCP] Stop signal received, calling EndTest")
+			local eok, eerr = pcall(function() StudioTestService:EndTest("stopped_by_mcp") end)
+			if not eok then
+				warn("[MCP] EndTest failed: " .. tostring(eerr))
+			end
 			return
 		end
 	end
