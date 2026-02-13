@@ -236,6 +236,27 @@ function pollForRequests(connIndex: number) {
 	}
 }
 
+function discoverPort(): number | undefined {
+	for (let offset = 0; offset < 5; offset++) {
+		const port = State.BASE_PORT + offset;
+		const [success, result] = pcall(() => {
+			return HttpService.RequestAsync({
+				Url: `http://localhost:${port}/status`,
+				Method: "GET",
+				Headers: { "Content-Type": "application/json" },
+			});
+		});
+
+		if (success && result.Success) {
+			const [ok, data] = pcall(() => HttpService.JSONDecode(result.Body) as { pluginConnected: boolean });
+			if (ok && data.pluginConnected === false) {
+				return port;
+			}
+		}
+	}
+	return undefined;
+}
+
 function activatePlugin(connIndex?: number) {
 	const idx = connIndex ?? State.getActiveTabIndex();
 	const conn = State.getConnection(idx);
@@ -243,7 +264,14 @@ function activatePlugin(connIndex?: number) {
 
 	const ui = UI.getElements();
 
-	if (idx === State.getActiveTabIndex()) {
+	const discoveredPort = discoverPort();
+	if (discoveredPort !== undefined) {
+		conn.port = discoveredPort;
+		conn.serverUrl = `http://localhost:${discoveredPort}`;
+		if (idx === State.getActiveTabIndex()) {
+			ui.urlInput.Text = conn.serverUrl;
+		}
+	} else if (idx === State.getActiveTabIndex()) {
 		conn.serverUrl = ui.urlInput.Text;
 		const [portStr] = conn.serverUrl.match(":(%d+)$");
 		if (portStr) conn.port = tonumber(portStr) ?? conn.port;

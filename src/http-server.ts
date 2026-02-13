@@ -77,7 +77,7 @@ export function createHttpServer(tools: RobloxStudioTools, bridge: BridgeService
 
   app.get('/status', (req, res) => {
     res.json({
-      pluginConnected,
+      pluginConnected: isPluginConnected(),
       mcpServerActive: isMCPServerActive(),
       lastMCPActivity,
       uptime: mcpServerActive ? Date.now() - mcpServerStartTime : 0
