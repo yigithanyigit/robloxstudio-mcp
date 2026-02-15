@@ -9,12 +9,35 @@ const execAsync = promisify(exec);
 async function getWindowId(): Promise<string | null> {
   if (process.platform !== 'darwin') return null;
   try {
+    // Get CGWindowID via CGWindowListCopyWindowInfo — works regardless of process name
     const { stdout } = await execAsync(
-      `osascript -e 'tell application "System Events" to get id of first window of (first process whose name contains "Roblox")'`
+      `osascript -e '
+        tell application "System Events"
+          set studioProc to first process whose name contains "RobloxStudio" or name contains "Roblox Studio"
+          set frontWin to first window of studioProc
+          return id of frontWin
+        end tell
+      '`
     );
     return stdout.trim() || null;
   } catch {
-    return null;
+    // Fallback: try to find window ID via CGWindowList
+    try {
+      const { stdout } = await execAsync(
+        `python3 -c "
+import Quartz
+windows = Quartz.CGWindowListCopyWindowInfo(Quartz.kCGWindowListOptionOnScreenOnly, Quartz.kCGNullWindowID)
+for w in windows:
+    name = w.get('kCGWindowOwnerName', '')
+    if 'Roblox' in name:
+        print(w.get('kCGWindowNumber', ''))
+        break
+"`
+      );
+      return stdout.trim() || null;
+    } catch {
+      return null;
+    }
   }
 }
 
@@ -25,10 +48,11 @@ export async function takeScreenshot(): Promise<{ path: string; base64: string }
   if (process.platform === 'darwin') {
     const windowId = await getWindowId();
     if (windowId) {
-      await execAsync(`screencapture -l ${windowId} "${filepath}"`);
+      // -x = silent (no screenshot sound), -l = capture specific window by ID
+      await execAsync(`screencapture -x -l ${windowId} "${filepath}"`);
     } else {
-      // Fallback: capture front window
-      await execAsync(`screencapture -w "${filepath}"`);
+      // Fallback: capture entire screen silently (no user interaction)
+      await execAsync(`screencapture -x "${filepath}"`);
     }
   } else if (process.platform === 'win32') {
     const psScript = `
