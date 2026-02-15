@@ -310,6 +310,39 @@ function massDuplicate(requestData: Record<string, unknown>) {
 	};
 }
 
+function moveInstance(requestData: Record<string, unknown>) {
+	const instancePath = requestData.instancePath as string;
+	const newParent = requestData.newParent as string | undefined;
+	const newName = requestData.newName as string | undefined;
+
+	if (!instancePath) return { error: "Instance path is required" };
+	if (!newParent && !newName) return { error: "At least newParent or newName must be provided" };
+
+	const instance = getInstanceByPath(instancePath);
+	if (!instance) return { error: `Instance not found: ${instancePath}` };
+	if (instance === game) return { error: "Cannot move the game instance" };
+
+	const oldPath = getInstancePath(instance);
+
+	const [success, result] = pcall(() => {
+		if (newName) {
+			instance.Name = newName;
+		}
+		if (newParent) {
+			const parentInstance = getInstanceByPath(newParent);
+			if (!parentInstance) error(`Parent instance not found: ${newParent}`);
+			instance.Parent = parentInstance;
+		}
+		ChangeHistoryService.SetWaypoint(`Move/rename ${instance.Name}`);
+		return getInstancePath(instance);
+	});
+
+	if (success) {
+		return { success: true, oldPath, newPath: result as string };
+	}
+	return { error: `Failed to move instance: ${result}` };
+}
+
 export = {
 	createObject,
 	deleteObject,
@@ -317,4 +350,5 @@ export = {
 	massCreateObjectsWithProperties,
 	smartDuplicate,
 	massDuplicate,
+	moveInstance,
 };

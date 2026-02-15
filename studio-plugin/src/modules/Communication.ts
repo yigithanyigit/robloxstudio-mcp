@@ -58,6 +58,14 @@ const routeMap: Record<string, Handler> = {
 	"/api/start-playtest": TestHandlers.startPlaytest,
 	"/api/stop-playtest": TestHandlers.stopPlaytest,
 	"/api/get-playtest-output": TestHandlers.getPlaytestOutput,
+	"/api/get-game-state": TestHandlers.getGameState,
+	"/api/send-game-command": TestHandlers.sendGameCommand,
+
+	"/api/validate-script": ScriptHandlers.validateScript,
+	"/api/get-script-deps": ScriptHandlers.getScriptDeps,
+	"/api/get-module-info": ScriptHandlers.getModuleInfo,
+
+	"/api/move-instance": InstanceHandlers.moveInstance,
 };
 
 function processRequest(request: RequestPayload): unknown {

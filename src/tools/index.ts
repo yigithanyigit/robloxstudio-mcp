@@ -1,11 +1,18 @@
 import { StudioHttpClient } from './studio-client.js';
 import { BridgeService } from '../bridge-service.js';
+import { LockService } from '../lock-service.js';
+import { ActivityService } from '../activity-service.js';
+import { takeScreenshot } from './screenshot.js';
 
 export class RobloxStudioTools {
   private client: StudioHttpClient;
+  private lockService: LockService;
+  private activityService: ActivityService;
 
   constructor(bridge: BridgeService) {
     this.client = new StudioHttpClient(bridge);
+    this.lockService = new LockService();
+    this.activityService = new ActivityService();
   }
 
 
@@ -664,13 +671,190 @@ export class RobloxStudioTools {
     };
   }
 
-  async getPlaytestOutput() {
-    const response = await this.client.request('/api/get-playtest-output', {});
+  async getPlaytestOutput(filter?: string, since?: number, clear?: boolean) {
+    const response = await this.client.request('/api/get-playtest-output', { filter, since, clear });
     return {
       content: [
         {
           type: 'text',
           text: JSON.stringify(response, null, 2)
+        }
+      ]
+    };
+  }
+
+
+  async validateScript(instancePath?: string, source?: string) {
+    if (!instancePath && !source) {
+      throw new Error('Either instancePath or source is required for validate_script');
+    }
+    const response = await this.client.request('/api/validate-script', { instancePath, source });
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(response, null, 2)
+        }
+      ]
+    };
+  }
+
+  async getScriptDeps(instancePath: string) {
+    if (!instancePath) {
+      throw new Error('Instance path is required for get_script_deps');
+    }
+    const response = await this.client.request('/api/get-script-deps', { instancePath });
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(response, null, 2)
+        }
+      ]
+    };
+  }
+
+  async getModuleInfo(instancePath: string) {
+    if (!instancePath) {
+      throw new Error('Instance path is required for get_module_info');
+    }
+    const response = await this.client.request('/api/get-module-info', { instancePath });
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(response, null, 2)
+        }
+      ]
+    };
+  }
+
+  async moveInstance(instancePath: string, newParent?: string, newName?: string) {
+    if (!instancePath) {
+      throw new Error('Instance path is required for move_instance');
+    }
+    if (!newParent && !newName) {
+      throw new Error('At least newParent or newName must be provided for move_instance');
+    }
+    const response = await this.client.request('/api/move-instance', { instancePath, newParent, newName });
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(response, null, 2)
+        }
+      ]
+    };
+  }
+
+  async acquireLock(instancePath: string, agentId: string) {
+    if (!instancePath || !agentId) {
+      throw new Error('instancePath and agentId are required for acquire_lock');
+    }
+    const result = this.lockService.acquire(instancePath, agentId);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(result, null, 2)
+        }
+      ]
+    };
+  }
+
+  async releaseLock(instancePath: string, agentId: string) {
+    if (!instancePath || !agentId) {
+      throw new Error('instancePath and agentId are required for release_lock');
+    }
+    const result = this.lockService.release(instancePath, agentId);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(result, null, 2)
+        }
+      ]
+    };
+  }
+
+  async listLocks() {
+    const locks = this.lockService.list();
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(locks, null, 2)
+        }
+      ]
+    };
+  }
+
+  async reportActivity(agentId: string, action: string, instancePath?: string) {
+    if (!agentId || !action) {
+      throw new Error('agentId and action are required for report_activity');
+    }
+    const entry = this.activityService.report(agentId, action, instancePath);
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(entry, null, 2)
+        }
+      ]
+    };
+  }
+
+  async getActivity() {
+    const entries = this.activityService.getAll();
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(entries, null, 2)
+        }
+      ]
+    };
+  }
+
+  async getGameState(query?: string) {
+    const response = await this.client.request('/api/get-game-state', { query });
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(response, null, 2)
+        }
+      ]
+    };
+  }
+
+  async sendGameCommand(command: string, params?: Record<string, any>) {
+    if (!command) {
+      throw new Error('command is required for send_game_command');
+    }
+    const response = await this.client.request('/api/send-game-command', { command, params });
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify(response, null, 2)
+        }
+      ]
+    };
+  }
+
+  async takeScreenshot() {
+    const result = await takeScreenshot();
+    return {
+      content: [
+        {
+          type: 'image',
+          data: result.base64,
+          mimeType: 'image/png',
+        },
+        {
+          type: 'text',
+          text: JSON.stringify({ path: result.path }, null, 2)
         }
       ]
     };

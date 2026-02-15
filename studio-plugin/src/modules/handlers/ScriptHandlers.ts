@@ -318,10 +318,155 @@ function deleteScriptLines(requestData: Record<string, unknown>) {
 	return { error: `Failed to delete script lines: ${result}` };
 }
 
+function validateScript(requestData: Record<string, unknown>) {
+	const instancePath = requestData.instancePath as string | undefined;
+	const rawSource = requestData.source as string | undefined;
+
+	let source: string;
+	if (rawSource !== undefined) {
+		source = rawSource;
+	} else if (instancePath) {
+		const instance = getInstanceByPath(instancePath);
+		if (!instance) return { error: `Instance not found: ${instancePath}` };
+		if (!instance.IsA("LuaSourceContainer")) {
+			return { error: `Instance is not a script: ${instance.ClassName}` };
+		}
+		source = readScriptSource(instance);
+	} else {
+		return { error: "Either instancePath or source is required" };
+	}
+
+	const [success, err] = pcall(() => {
+		(loadstring as (s: string) => unknown)(source);
+	});
+
+	if (success) {
+		return { valid: true, errors: [] };
+	}
+
+	const errStr = tostring(err);
+	const errors: { line: number | undefined; message: string }[] = [];
+	const [lineStr, msg] = errStr.match(":(%d+):%s*(.+)$") as LuaTuple<[string?, string?]>;
+	if (lineStr && msg) {
+		errors.push({ line: tonumber(lineStr), message: msg });
+	} else {
+		errors.push({ line: undefined, message: errStr });
+	}
+
+	return { valid: false, errors };
+}
+
+function getScriptDeps(requestData: Record<string, unknown>) {
+	const instancePath = requestData.instancePath as string;
+	if (!instancePath) return { error: "Instance path is required" };
+
+	const instance = getInstanceByPath(instancePath);
+	if (!instance) return { error: `Instance not found: ${instancePath}` };
+	if (!instance.IsA("LuaSourceContainer")) {
+		return { error: `Instance is not a script: ${instance.ClassName}` };
+	}
+
+	const myPath = getInstancePath(instance);
+	const myName = instance.Name;
+
+	const [success, result] = pcall(() => {
+		const source = readScriptSource(instance!);
+		const requires: { path: string; variable: string }[] = [];
+
+		for (const [variable, reqPath] of source.gmatch("local%s+(%w+)%s*=%s*require%(([^%)]+)%)")) {
+			requires.push({ path: reqPath as string, variable: variable as string });
+		}
+
+		const requiredBy: { path: string; variable: string }[] = [];
+
+		function scanDescendants(root: Instance) {
+			for (const desc of root.GetDescendants()) {
+				if (desc.IsA("LuaSourceContainer") && desc !== instance) {
+					const [ok, descSource] = pcall(() => readScriptSource(desc as LuaSourceContainer));
+					if (ok && descSource) {
+						for (const [variable, reqPath] of (descSource as string).gmatch("local%s+(%w+)%s*=%s*require%(([^%)]+)%)")) {
+							const rp = reqPath as string;
+							if (rp.find(myName)[0] || rp.find(myPath)[0]) {
+								requiredBy.push({
+									path: getInstancePath(desc),
+									variable: variable as string,
+								});
+							}
+						}
+					}
+				}
+			}
+		}
+
+		scanDescendants(game);
+
+		return { instancePath: myPath, requires, requiredBy };
+	});
+
+	if (success) return result;
+	return { error: `Failed to get script dependencies: ${result}` };
+}
+
+function getModuleInfo(requestData: Record<string, unknown>) {
+	const instancePath = requestData.instancePath as string;
+	if (!instancePath) return { error: "Instance path is required" };
+
+	const instance = getInstanceByPath(instancePath);
+	if (!instance) return { error: `Instance not found: ${instancePath}` };
+	if (!instance.IsA("ModuleScript")) {
+		return { error: `Instance is not a ModuleScript: ${instance.ClassName}` };
+	}
+
+	const [success, result] = pcall(() => {
+		const source = readScriptSource(instance);
+		const [lines] = splitLines(source);
+
+		const exportedKeys: string[] = [];
+		for (const [key] of source.gmatch("([%w_]+)%s*=")) {
+			exportedKeys.push(key as string);
+		}
+		for (const [key] of source.gmatch("function%s+[%w_%.]-%.?([%w_]+)%s*%(")) {
+			if (!exportedKeys.includes(key as string)) {
+				exportedKeys.push(key as string);
+			}
+		}
+
+		const descriptionLines: string[] = [];
+		for (const line of lines) {
+			const trimmed = line.match("^%s*%-%-(.*)$") as LuaTuple<[string?]>;
+			if (trimmed[0] !== undefined) {
+				descriptionLines.push(trimmed[0]);
+			} else {
+				break;
+			}
+		}
+
+		const dependencies: { path: string; variable: string }[] = [];
+		for (const [variable, reqPath] of source.gmatch("local%s+(%w+)%s*=%s*require%(([^%)]+)%)")) {
+			dependencies.push({ path: reqPath as string, variable: variable as string });
+		}
+
+		return {
+			instancePath: getInstancePath(instance),
+			name: instance.Name,
+			exports: exportedKeys,
+			dependencies,
+			description: descriptionLines.size() > 0 ? descriptionLines.join("\n") : undefined,
+			lineCount: lines.size(),
+		};
+	});
+
+	if (success) return result;
+	return { error: `Failed to get module info: ${result}` };
+}
+
 export = {
 	getScriptSource,
 	setScriptSource,
 	editScriptLines,
 	insertScriptLines,
 	deleteScriptLines,
+	validateScript,
+	getScriptDeps,
+	getModuleInfo,
 };

@@ -92,6 +92,12 @@ local routeMap = {
 	["/api/start-playtest"] = TestHandlers.startPlaytest,
 	["/api/stop-playtest"] = TestHandlers.stopPlaytest,
 	["/api/get-playtest-output"] = TestHandlers.getPlaytestOutput,
+	["/api/get-game-state"] = TestHandlers.getGameState,
+	["/api/send-game-command"] = TestHandlers.sendGameCommand,
+	["/api/validate-script"] = ScriptHandlers.validateScript,
+	["/api/get-script-deps"] = ScriptHandlers.getScriptDeps,
+	["/api/get-module-info"] = ScriptHandlers.getModuleInfo,
+	["/api/move-instance"] = InstanceHandlers.moveInstance,
 }
 local function processRequest(request)
 	local endpoint = request.endpoint
@@ -928,6 +934,57 @@ local function massDuplicate(requestData)
 		},
 	}
 end
+local function moveInstance(requestData)
+	local instancePath = requestData.instancePath
+	local newParent = requestData.newParent
+	local newName = requestData.newName
+	if not (instancePath ~= "" and instancePath) then
+		return {
+			error = "Instance path is required",
+		}
+	end
+	if not (newParent ~= "" and newParent) and not (newName ~= "" and newName) then
+		return {
+			error = "At least newParent or newName must be provided",
+		}
+	end
+	local instance = getInstanceByPath(instancePath)
+	if not instance then
+		return {
+			error = `Instance not found: {instancePath}`,
+		}
+	end
+	if instance == game then
+		return {
+			error = "Cannot move the game instance",
+		}
+	end
+	local oldPath = getInstancePath(instance)
+	local success, result = pcall(function()
+		if newName ~= "" and newName then
+			instance.Name = newName
+		end
+		if newParent ~= "" and newParent then
+			local parentInstance = getInstanceByPath(newParent)
+			if not parentInstance then
+				error(`Parent instance not found: {newParent}`)
+			end
+			instance.Parent = parentInstance
+		end
+		ChangeHistoryService:SetWaypoint(`Move/rename {instance.Name}`)
+		return getInstancePath(instance)
+	end)
+	if success then
+		return {
+			success = true,
+			oldPath = oldPath,
+			newPath = result,
+		}
+	end
+	return {
+		error = `Failed to move instance: {result}`,
+	}
+end
 return {
 	createObject = createObject,
 	deleteObject = deleteObject,
@@ -935,6 +992,7 @@ return {
 	massCreateObjectsWithProperties = massCreateObjectsWithProperties,
 	smartDuplicate = smartDuplicate,
 	massDuplicate = massDuplicate,
+	moveInstance = moveInstance,
 }
 ]]></string>
           </Properties>
@@ -3010,12 +3068,208 @@ local function deleteScriptLines(requestData)
 		error = `Failed to delete script lines: {result}`,
 	}
 end
+local function validateScript(requestData)
+	local instancePath = requestData.instancePath
+	local rawSource = requestData.source
+	local source
+	if rawSource ~= nil then
+		source = rawSource
+	elseif instancePath ~= "" and instancePath then
+		local instance = getInstanceByPath(instancePath)
+		if not instance then
+			return {
+				error = `Instance not found: {instancePath}`,
+			}
+		end
+		if not instance:IsA("LuaSourceContainer") then
+			return {
+				error = `Instance is not a script: {instance.ClassName}`,
+			}
+		end
+		source = readScriptSource(instance)
+	else
+		return {
+			error = "Either instancePath or source is required",
+		}
+	end
+	local success, err = pcall(function()
+		loadstring(source)
+	end)
+	if success then
+		return {
+			valid = true,
+			errors = {},
+		}
+	end
+	local errStr = tostring(err)
+	local errors = {}
+	local lineStr, msg = string.match(errStr, ":(%d+):%s*(.+)$")
+	local _condition = lineStr
+	if _condition ~= "" and _condition then
+		_condition = msg
+	end
+	if _condition ~= "" and _condition then
+		local _arg0 = {
+			line = tonumber(lineStr),
+			message = msg,
+		}
+		table.insert(errors, _arg0)
+	else
+		local _arg0 = {
+			line = nil,
+			message = errStr,
+		}
+		table.insert(errors, _arg0)
+	end
+	return {
+		valid = false,
+		errors = errors,
+	}
+end
+local function getScriptDeps(requestData)
+	local instancePath = requestData.instancePath
+	if not (instancePath ~= "" and instancePath) then
+		return {
+			error = "Instance path is required",
+		}
+	end
+	local instance = getInstanceByPath(instancePath)
+	if not instance then
+		return {
+			error = `Instance not found: {instancePath}`,
+		}
+	end
+	if not instance:IsA("LuaSourceContainer") then
+		return {
+			error = `Instance is not a script: {instance.ClassName}`,
+		}
+	end
+	local myPath = getInstancePath(instance)
+	local myName = instance.Name
+	local success, result = pcall(function()
+		local source = readScriptSource(instance)
+		local requires = {}
+		for variable, reqPath in string.gmatch(source, "local%s+(%w+)%s*=%s*require%(([^%)]+)%)") do
+			local _arg0 = {
+				path = reqPath,
+				variable = variable,
+			}
+			table.insert(requires, _arg0)
+		end
+		local requiredBy = {}
+		local function scanDescendants(root)
+			for _, desc in root:GetDescendants() do
+				if desc:IsA("LuaSourceContainer") and desc ~= instance then
+					local ok, descSource = pcall(function()
+						return readScriptSource(desc)
+					end)
+					local _value = ok and descSource
+					if _value ~= "" and _value then
+						for variable, reqPath in string.gmatch(descSource, "local%s+(%w+)%s*=%s*require%(([^%)]+)%)") do
+							local rp = reqPath
+							local _condition = (string.find(rp, myName))
+							if not (_condition ~= 0 and _condition == _condition and _condition) then
+								_condition = (string.find(rp, myPath))
+							end
+							if _condition ~= 0 and _condition == _condition and _condition then
+								local _arg0 = {
+									path = getInstancePath(desc),
+									variable = variable,
+								}
+								table.insert(requiredBy, _arg0)
+							end
+						end
+					end
+				end
+			end
+		end
+		scanDescendants(game)
+		return {
+			instancePath = myPath,
+			requires = requires,
+			requiredBy = requiredBy,
+		}
+	end)
+	if success then
+		return result
+	end
+	return {
+		error = `Failed to get script dependencies: {result}`,
+	}
+end
+local function getModuleInfo(requestData)
+	local instancePath = requestData.instancePath
+	if not (instancePath ~= "" and instancePath) then
+		return {
+			error = "Instance path is required",
+		}
+	end
+	local instance = getInstanceByPath(instancePath)
+	if not instance then
+		return {
+			error = `Instance not found: {instancePath}`,
+		}
+	end
+	if not instance:IsA("ModuleScript") then
+		return {
+			error = `Instance is not a ModuleScript: {instance.ClassName}`,
+		}
+	end
+	local success, result = pcall(function()
+		local source = readScriptSource(instance)
+		local lines = splitLines(source)
+		local exportedKeys = {}
+		for key in string.gmatch(source, "([%w_]+)%s*=") do
+			table.insert(exportedKeys, key)
+		end
+		for key in string.gmatch(source, "function%s+[%w_%.]-%.?([%w_]+)%s*%(") do
+			if not (table.find(exportedKeys, key) ~= nil) then
+				table.insert(exportedKeys, key)
+			end
+		end
+		local descriptionLines = {}
+		for _, line in lines do
+			local trimmed = { string.match(line, "^%s*%-%-(.*)$") }
+			if trimmed[1] ~= nil then
+				local _arg0 = trimmed[1]
+				table.insert(descriptionLines, _arg0)
+			else
+				break
+			end
+		end
+		local dependencies = {}
+		for variable, reqPath in string.gmatch(source, "local%s+(%w+)%s*=%s*require%(([^%)]+)%)") do
+			local _arg0 = {
+				path = reqPath,
+				variable = variable,
+			}
+			table.insert(dependencies, _arg0)
+		end
+		return {
+			instancePath = getInstancePath(instance),
+			name = instance.Name,
+			exports = exportedKeys,
+			dependencies = dependencies,
+			description = if #descriptionLines > 0 then table.concat(descriptionLines, "\n") else nil,
+			lineCount = #lines,
+		}
+	end)
+	if success then
+		return result
+	end
+	return {
+		error = `Failed to get module info: {result}`,
+	}
+end
 return {
 	getScriptSource = getScriptSource,
 	setScriptSource = setScriptSource,
 	editScriptLines = editScriptLines,
 	insertScriptLines = insertScriptLines,
 	deleteScriptLines = deleteScriptLines,
+	validateScript = validateScript,
+	getScriptDeps = getScriptDeps,
+	getModuleInfo = getModuleInfo,
 }
 ]]></string>
           </Properties>
@@ -3146,24 +3400,304 @@ local function stopPlaytest(_requestData)
 	_object.message = "Playtest stop signal sent."
 	return _object
 end
-local function getPlaytestOutput(_requestData)
-	local _object = {
-		isRunning = testRunning,
-	}
-	local _left = "output"
+local function getPlaytestOutput(requestData)
+	local filter = requestData.filter
+	local since = requestData.since
+	local clearAfter = requestData.clear
 	local _array = {}
 	local _length = #_array
 	table.move(outputBuffer, 1, #outputBuffer, _length + 1, _array)
-	_object[_left] = _array
-	_object.outputCount = #outputBuffer
-	_object.testResult = if testResult ~= nil then tostring(testResult) else nil
-	_object.testError = testError
-	return _object
+	local entries = _array
+	if since ~= nil then
+		-- ▼ ReadonlyArray.filter ▼
+		local _newValue = {}
+		local _callback = function(e)
+			return e.timestamp > since
+		end
+		local _length_1 = 0
+		for _k, _v in entries do
+			if _callback(_v, _k - 1, entries) == true then
+				_length_1 += 1
+				_newValue[_length_1] = _v
+			end
+		end
+		-- ▲ ReadonlyArray.filter ▲
+		entries = _newValue
+	end
+	local _condition = filter
+	if _condition ~= "" and _condition then
+		_condition = filter ~= "all"
+	end
+	if _condition ~= "" and _condition then
+		local typeMap = {
+			error = "MessageError",
+			warn = "MessageWarning",
+			print = "MessageOutput",
+		}
+		local target = typeMap[filter]
+		if target ~= "" and target then
+			-- ▼ ReadonlyArray.filter ▼
+			local _newValue = {}
+			local _callback = function(e)
+				return e.messageType == target
+			end
+			local _length_1 = 0
+			for _k, _v in entries do
+				if _callback(_v, _k - 1, entries) == true then
+					_length_1 += 1
+					_newValue[_length_1] = _v
+				end
+			end
+			-- ▲ ReadonlyArray.filter ▲
+			entries = _newValue
+		end
+	end
+	local result = {
+		isRunning = testRunning,
+		output = entries,
+		outputCount = #entries,
+		testResult = if testResult ~= nil then tostring(testResult) else nil,
+		testError = testError,
+	}
+	if clearAfter then
+		outputBuffer = {}
+	end
+	return result
+end
+local function getGameState(requestData)
+	if not testRunning then
+		return {
+			error = "No playtest is currently running",
+		}
+	end
+	local query = requestData.query
+	local success, result = pcall(function()
+		local state = {
+			isRunning = true,
+		}
+		if not (query ~= "" and query) or query == "players" then
+			local Players = game:GetService("Players")
+			local playerList = {}
+			for _, player in Players:GetPlayers() do
+				local info = {
+					name = player.Name,
+					displayName = player.DisplayName,
+					userId = player.UserId,
+				}
+				local character = player.Character
+				if character then
+					local humanoid = character:FindFirstChildOfClass("Humanoid")
+					if humanoid then
+						info.health = humanoid.Health
+						info.maxHealth = humanoid.MaxHealth
+					end
+					local rootPart = character:FindFirstChild("HumanoidRootPart")
+					if rootPart then
+						info.position = {
+							X = rootPart.Position.X,
+							Y = rootPart.Position.Y,
+							Z = rootPart.Position.Z,
+						}
+					end
+				end
+				table.insert(playerList, info)
+			end
+			state.players = playerList
+		end
+		if not (query ~= "" and query) or query == "camera" then
+			local camera = game:GetService("Workspace").CurrentCamera
+			if camera then
+				local pos = camera.CFrame.Position
+				local look = camera.CFrame.LookVector
+				state.camera = {
+					position = {
+						X = pos.X,
+						Y = pos.Y,
+						Z = pos.Z,
+					},
+					lookVector = {
+						X = look.X,
+						Y = look.Y,
+						Z = look.Z,
+					},
+					fieldOfView = camera.FieldOfView,
+				}
+			end
+		end
+		if not (query ~= "" and query) or query == "workspace" then
+			local workspace = game:GetService("Workspace")
+			state.workspace = {
+				gravity = workspace.Gravity,
+				childCount = #workspace:GetChildren(),
+			}
+		end
+		return state
+	end)
+	if success then
+		return result
+	end
+	return {
+		error = `Failed to get game state: {result}`,
+	}
+end
+local function sendGameCommand(requestData)
+	if not testRunning then
+		return {
+			error = "No playtest is currently running",
+		}
+	end
+	local command = requestData.command
+	local params = (requestData.params) or {}
+	if not (command ~= "" and command) then
+		return {
+			error = "command is required",
+		}
+	end
+	local success, result = pcall(function()
+		if command == "move_player" then
+			local targetPos = params.targetPosition
+			if not targetPos then
+				error("targetPosition is required for move_player")
+			end
+			local Players = game:GetService("Players")
+			local players = Players:GetPlayers()
+			if #players == 0 then
+				error("No players in game")
+			end
+			local player = players[1]
+			local character = player.Character
+			if not character then
+				error("Player has no character")
+			end
+			local rootPart = character:FindFirstChild("HumanoidRootPart")
+			if not rootPart then
+				error("Character has no HumanoidRootPart")
+			end
+			local _condition = targetPos.X
+			if _condition == nil then
+				_condition = 0
+			end
+			local _condition_1 = targetPos.Y
+			if _condition_1 == nil then
+				_condition_1 = 0
+			end
+			local _condition_2 = targetPos.Z
+			if _condition_2 == nil then
+				_condition_2 = 0
+			end
+			rootPart.CFrame = CFrame.new(_condition, _condition_1, _condition_2)
+			return {
+				success = true,
+				result = "Player moved",
+			}
+		end
+		if command == "set_camera" then
+			local position = params.position
+			local lookAt = params.lookAt
+			if not position then
+				error("position is required for set_camera")
+			end
+			local camera = game:GetService("Workspace").CurrentCamera
+			if not camera then
+				error("No current camera")
+			end
+			local _condition = position.X
+			if _condition == nil then
+				_condition = 0
+			end
+			local _condition_1 = position.Y
+			if _condition_1 == nil then
+				_condition_1 = 0
+			end
+			local _condition_2 = position.Z
+			if _condition_2 == nil then
+				_condition_2 = 0
+			end
+			local posVec = Vector3.new(_condition, _condition_1, _condition_2)
+			if lookAt then
+				local _condition_3 = lookAt.X
+				if _condition_3 == nil then
+					_condition_3 = 0
+				end
+				local _condition_4 = lookAt.Y
+				if _condition_4 == nil then
+					_condition_4 = 0
+				end
+				local _condition_5 = lookAt.Z
+				if _condition_5 == nil then
+					_condition_5 = 0
+				end
+				local lookVec = Vector3.new(_condition_3, _condition_4, _condition_5)
+				camera.CFrame = CFrame.lookAt(posVec, lookVec)
+			else
+				camera.CFrame = CFrame.new(posVec)
+			end
+			return {
+				success = true,
+				result = "Camera repositioned",
+			}
+		end
+		if command == "click_ui" then
+			local buttonPath = params.buttonPath
+			if not (buttonPath ~= "" and buttonPath) then
+				error("buttonPath is required for click_ui")
+			end
+			local Players = game:GetService("Players")
+			local localPlayer = Players.LocalPlayer
+			if not localPlayer then
+				error("No LocalPlayer available")
+			end
+			local playerGui = localPlayer:FindFirstChild("PlayerGui")
+			if not playerGui then
+				error("No PlayerGui found")
+			end
+			local btn = playerGui:FindFirstChild(buttonPath, true)
+			if not btn then
+				error(`UI element not found: {buttonPath}`)
+			end
+			local fireOk = pcall(function()
+				btn.Activated.Fire()
+			end)
+			if not fireOk then
+				btn:SetAttribute("__MCP_Clicked", tick())
+			end
+			return {
+				success = true,
+				result = `Clicked {buttonPath}`,
+			}
+		end
+		if command == "set_property" then
+			local instancePath = params.instancePath
+			local property = params.property
+			local value = params.value
+			if not (instancePath ~= "" and instancePath) or not (property ~= "" and property) then
+				error("instancePath and property are required")
+			end
+			local inst = game:FindFirstChild(instancePath, true)
+			if not inst then
+				error(`Instance not found: {instancePath}`)
+			end
+			inst[property] = value
+			return {
+				success = true,
+				result = `Set {property} on {instancePath}`,
+			}
+		end
+		error(`Unknown command: {command}`)
+	end)
+	if success then
+		return result
+	end
+	return {
+		error = `Command failed: {result}`,
+	}
 end
 return {
 	startPlaytest = startPlaytest,
 	stopPlaytest = stopPlaytest,
 	getPlaytestOutput = getPlaytestOutput,
+	getGameState = getGameState,
+	sendGameCommand = sendGameCommand,
 }
 ]]></string>
           </Properties>

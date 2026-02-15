@@ -892,7 +892,210 @@ class RobloxStudioMCPServer {
           },
           {
             name: 'get_playtest_output',
-            description: 'Poll the output buffer without stopping the test. Returns isRunning, captured print/warn/error messages, and any test result. Call repeatedly to monitor a running session — useful for waiting on specific log output or checking if errors have occurred.',
+            description: 'Poll the output buffer without stopping the test. Returns isRunning, captured print/warn/error messages, and any test result. Supports filtering by type and timestamp.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                filter: {
+                  type: 'string',
+                  enum: ['error', 'warn', 'print', 'all'],
+                  description: 'Filter output by message type',
+                  default: 'all'
+                },
+                since: {
+                  type: 'number',
+                  description: 'Only return entries after this timestamp'
+                },
+                clear: {
+                  type: 'boolean',
+                  description: 'Clear the output buffer after reading',
+                  default: false
+                }
+              }
+            }
+          },
+
+          {
+            name: 'validate_script',
+            description: 'Validate Luau script syntax without running it. Checks for syntax errors and returns line/column info. Provide either an instancePath to validate an existing script, or raw source code.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                instancePath: {
+                  type: 'string',
+                  description: 'Roblox instance path to the script to validate'
+                },
+                source: {
+                  type: 'string',
+                  description: 'Raw Luau source code to validate (alternative to instancePath)'
+                }
+              }
+            }
+          },
+          {
+            name: 'get_script_deps',
+            description: 'Analyze script dependencies — find what a script requires and what other scripts require it. Returns both forward dependencies (require calls) and reverse dependencies (scripts that require this one).',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                instancePath: {
+                  type: 'string',
+                  description: 'Roblox instance path to the script to analyze'
+                }
+              },
+              required: ['instancePath']
+            }
+          },
+          {
+            name: 'get_module_info',
+            description: 'Get detailed information about a ModuleScript: exported keys, dependencies, leading comment description, and line count.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                instancePath: {
+                  type: 'string',
+                  description: 'Roblox instance path to the ModuleScript'
+                }
+              },
+              required: ['instancePath']
+            }
+          },
+
+          {
+            name: 'move_instance',
+            description: 'Move and/or rename a Roblox instance. Change its parent, name, or both.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                instancePath: {
+                  type: 'string',
+                  description: 'Current path of the instance to move'
+                },
+                newParent: {
+                  type: 'string',
+                  description: 'New parent instance path'
+                },
+                newName: {
+                  type: 'string',
+                  description: 'New name for the instance'
+                }
+              },
+              required: ['instancePath']
+            }
+          },
+
+          {
+            name: 'acquire_lock',
+            description: 'Acquire an editing lock on a Roblox instance for multi-agent coordination. Locks auto-expire after 5 minutes. Re-acquiring a lock you already hold refreshes the TTL.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                instancePath: {
+                  type: 'string',
+                  description: 'Instance path to lock'
+                },
+                agentId: {
+                  type: 'string',
+                  description: 'Unique identifier for the agent acquiring the lock'
+                }
+              },
+              required: ['instancePath', 'agentId']
+            }
+          },
+          {
+            name: 'release_lock',
+            description: 'Release an editing lock on a Roblox instance. Only the lock holder can release it.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                instancePath: {
+                  type: 'string',
+                  description: 'Instance path to unlock'
+                },
+                agentId: {
+                  type: 'string',
+                  description: 'Agent ID that holds the lock'
+                }
+              },
+              required: ['instancePath', 'agentId']
+            }
+          },
+          {
+            name: 'list_locks',
+            description: 'List all active editing locks across the project.',
+            inputSchema: {
+              type: 'object',
+              properties: {}
+            }
+          },
+
+          {
+            name: 'report_activity',
+            description: 'Report an agent action to the shared activity log for multi-agent awareness.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                agentId: {
+                  type: 'string',
+                  description: 'Agent reporting the activity'
+                },
+                action: {
+                  type: 'string',
+                  description: 'Description of the action taken'
+                },
+                instancePath: {
+                  type: 'string',
+                  description: 'Instance path related to the action (optional)'
+                }
+              },
+              required: ['agentId', 'action']
+            }
+          },
+          {
+            name: 'get_activity',
+            description: 'Get recent agent activity log (last 50 entries) for multi-agent coordination.',
+            inputSchema: {
+              type: 'object',
+              properties: {}
+            }
+          },
+
+          {
+            name: 'get_game_state',
+            description: 'Read game state during an active playtest. Returns player positions/health, camera info, and workspace data. Use the query parameter to filter: "players", "camera", "workspace", or omit for all.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                query: {
+                  type: 'string',
+                  enum: ['players', 'camera', 'workspace'],
+                  description: 'Optional filter for specific game state data'
+                }
+              }
+            }
+          },
+          {
+            name: 'send_game_command',
+            description: 'Execute commands in a running playtest: teleport players, reposition camera, click UI buttons, or set runtime properties.',
+            inputSchema: {
+              type: 'object',
+              properties: {
+                command: {
+                  type: 'string',
+                  enum: ['move_player', 'set_camera', 'click_ui', 'set_property'],
+                  description: 'Command to execute'
+                },
+                params: {
+                  type: 'object',
+                  description: 'Command parameters. move_player: {targetPosition: {X,Y,Z}}. set_camera: {position: {X,Y,Z}, lookAt?: {X,Y,Z}}. click_ui: {buttonPath: string}. set_property: {instancePath, property, value}.'
+                }
+              },
+              required: ['command']
+            }
+          },
+          {
+            name: 'take_screenshot',
+            description: 'Capture a screenshot of the Roblox Studio window. Returns the image as base64 PNG. Works on macOS, Windows, and Linux.',
             inputSchema: {
               type: 'object',
               properties: {}
@@ -1003,7 +1206,36 @@ class RobloxStudioMCPServer {
           case 'stop_playtest':
             return await this.tools.stopPlaytest();
           case 'get_playtest_output':
-            return await this.tools.getPlaytestOutput();
+            return await this.tools.getPlaytestOutput((args as any)?.filter, (args as any)?.since, (args as any)?.clear);
+
+          case 'validate_script':
+            return await this.tools.validateScript((args as any)?.instancePath, (args as any)?.source);
+          case 'get_script_deps':
+            return await this.tools.getScriptDeps((args as any)?.instancePath as string);
+          case 'get_module_info':
+            return await this.tools.getModuleInfo((args as any)?.instancePath as string);
+
+          case 'move_instance':
+            return await this.tools.moveInstance((args as any)?.instancePath as string, (args as any)?.newParent, (args as any)?.newName);
+
+          case 'acquire_lock':
+            return await this.tools.acquireLock((args as any)?.instancePath as string, (args as any)?.agentId as string);
+          case 'release_lock':
+            return await this.tools.releaseLock((args as any)?.instancePath as string, (args as any)?.agentId as string);
+          case 'list_locks':
+            return await this.tools.listLocks();
+
+          case 'report_activity':
+            return await this.tools.reportActivity((args as any)?.agentId as string, (args as any)?.action as string, (args as any)?.instancePath);
+          case 'get_activity':
+            return await this.tools.getActivity();
+
+          case 'get_game_state':
+            return await this.tools.getGameState((args as any)?.query);
+          case 'send_game_command':
+            return await this.tools.sendGameCommand((args as any)?.command as string, (args as any)?.params);
+          case 'take_screenshot':
+            return await this.tools.takeScreenshot();
 
           default:
             throw new McpError(
